@@ -5,12 +5,12 @@
 </p>
 
 <p align="center">
-  <a href="https://jiangxincode.github.io/BBKEmu/"><img src="https://img.shields.io/badge/Website-BBKEmu-E8553A?logo=githubpages&logoColor=white" alt="Website"></a>
-  <a href="https://github.com/jiangxincode/BBKEmu/actions/workflows/ci.yml"><img src="https://github.com/jiangxincode/BBKEmu/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://AloysHF.github.io/BBKEmu/"><img src="https://img.shields.io/badge/Website-BBKEmu-E8553A?logo=githubpages&logoColor=white" alt="Website"></a>
+  <a href="https://github.com/AloysHF/BBKEmu/actions/workflows/ci.yml"><img src="https://github.com/AloysHF/BBKEmu/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://git.libretro.com/libretro/bbkemu/-/pipelines"><img src="https://img.shields.io/gitlab/pipeline-status/bbkemu?gitlab_url=https%3A%2F%2Fgit.libretro.com%2Flibretro&branch=master&logo=gitlab&label=Pipeline%20Status" alt="Gitlab Pipeline Status" ></a>
-  <a href="https://github.com/jiangxincode/BBKEmu/releases/latest"><img src="https://img.shields.io/github/v/release/jiangxincode/BBKEmu" alt="Release"></a>
-  <a href="https://github.com/jiangxincode/BBKEmu/releases"><img src="https://img.shields.io/github/downloads/jiangxincode/BBKEmu/total" alt="Downloads"></a>
-  <a href="https://sonarcloud.io/dashboard?id=jiangxincode_BBKEmu"><img src="https://sonarcloud.io/api/project_badges/measure?project=jiangxincode_BBKEmu&metric=alert_status" alt="Quality Gate Status"></a>
+  <a href="https://github.com/AloysHF/BBKEmu/releases/latest"><img src="https://img.shields.io/github/v/release/AloysHF/BBKEmu" alt="Release"></a>
+  <a href="https://github.com/AloysHF/BBKEmu/releases"><img src="https://img.shields.io/github/downloads/AloysHF/BBKEmu/total" alt="Downloads"></a>
+  <a href="https://sonarcloud.io/dashboard?id=AloysHF_BBKEmu"><img src="https://sonarcloud.io/api/project_badges/measure?project=AloysHF_BBKEmu&metric=alert_status" alt="Quality Gate Status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3%2B-blue.svg" alt="License: GPLv3 or later"></a>
 </p>
 
@@ -42,7 +42,7 @@ These files are not distributed with the emulator and must be obtained separatel
 
 ### Standalone Mode
 
-Download the latest binary from the [Releases](https://github.com/jiangxincode/BBKEmu/releases) page.
+Download the latest binary from the [Releases](https://github.com/AloysHF/BBKEmu/releases) page.
 
 The basic usage is listed below, but there are many more options for controlling the behavior of the emulator. See the [Command-line Options](docs/CLI-Options.md) documentation for the full list of options.
 
@@ -69,7 +69,7 @@ BBKEmu can be used as a libretro core with RetroArch, allowing you to play BBK g
 **Install the core** — choose one of the following methods:
 
 - **Online Updater**: Open RetroArch → **Main Menu → Online Updater → Core Downloader** → select **BBKEmu**
-- **Manual**: Download the core from the [Releases](https://github.com/jiangxincode/BBKEmu/releases) page, copy `bbkemu_libretro.dll` (or `.so`/`.dylib`) to RetroArch's `cores/` directory, and `bbkemu_libretro.info` to the `info/` directory
+- **Manual**: Download the core from the [Releases](https://github.com/AloysHF/BBKEmu/releases) page, copy `bbkemu_libretro.dll` (or `.so`/`.dylib`) to RetroArch's `cores/` directory, and `bbkemu_libretro.info` to the `info/` directory
 
 **Load the core in RetroArch:**
 

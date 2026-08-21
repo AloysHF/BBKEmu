@@ -21,7 +21,7 @@ Thank you for your interest in contributing to BBKEmu! This document provides gu
 
 ```bash
 # Clone the repository
-git clone https://github.com/jiangxincode/BBKEmu.git
+git clone https://github.com/AloysHF/BBKEmu.git
 cd BBKEmu
 
 # Build the project
@@ -179,6 +179,6 @@ When reporting bugs, please include:
 
 ## Getting Started
 
-Check the [open issues](https://github.com/jiangxincode/BBKEmu/issues) for tasks labeled `good first issue` or `help wanted`. If you have questions, feel free to open a discussion issue.
+Check the [open issues](https://github.com/AloysHF/BBKEmu/issues) for tasks labeled `good first issue` or `help wanted`. If you have questions, feel free to open a discussion issue.
 
 To understand the BBK game file format (`.gam`), see [Game File Formats](Game-File-Formats.md).

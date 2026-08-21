@@ -1,6 +1,6 @@
 # Software Information
 display_name = "BBKEmu (BBK Electronic Dictionary)"
-authors = "jiangxincode"
+authors = "AloysHF"
 supported_extensions = "gam"
 corename = "BBKEmu"
 categories = "Emulator"

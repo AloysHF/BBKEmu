@@ -11,7 +11,7 @@ BBKEmu runs as a libretro core on RetroArch, allowing you to play BBK electronic
 - iPhone or iPad (arm64, iOS 15+)
 - RetroArch 1.17.0 IPA ([official download](https://buildbot.libretro.com/stable/1.17.0/apple/ios-arm64/RetroArch.ipa))
   - Version 1.17.0 is recommended; newer versions have a different folder structure that makes manual injection more complex
-- Download `bbkemu-ios-libretro.tar.gz` from the [Releases](https://github.com/jiangxincode/BBKEmu/releases) page. It contains:
+- Download `bbkemu-ios-libretro.tar.gz` from the [Releases](https://github.com/AloysHF/BBKEmu/releases) page. It contains:
   - `bbkemu_libretro_ios.dylib` — core binary (real devices: arm64 + x86_64 universal)
   - `bbkemu_libretro.info` — core metadata
 - A file manager and IPA signing app (e.g. ESign, SideStore, or AltStore)
@@ -123,4 +123,4 @@ cargo build -p bbkemu-libretro --release --target aarch64-apple-ios-sim
 
 ## Related Issues
 
-If you run into issues installing this core on iOS, check the [GitHub Issues](https://github.com/jiangxincode/BBKEmu/issues) for discussions and solutions from the community.
+If you run into issues installing this core on iOS, check the [GitHub Issues](https://github.com/AloysHF/BBKEmu/issues) for discussions and solutions from the community.
