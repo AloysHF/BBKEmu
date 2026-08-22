@@ -1,7 +1,37 @@
-# Command-line Options
+# Standalone Emulator
 
-This document describes every command-line option of the standalone
-`bbkemu` binary, the default key mappings, and screenshot functionality.
+This guide covers installing and running the standalone `bbkemu` binary,
+loading games, keyboard controls, cheats, display options, and every
+command-line option.
+
+## Installation
+
+Download the latest standalone binary for your platform from the
+[Releases](https://github.com/AloysHF/BBKEmu/releases) page.
+
+You can also build it from source:
+
+```bash
+cargo build -p bbkemu --release
+```
+
+The binary is produced at `target/release/bbkemu` (`.exe` on Windows).
+
+## Loading Games
+
+The standalone emulator accepts `.gam` files. ROM files (`8.BIN` and `E.BIN`)
+are required and searched in the following order:
+
+1. Paths specified via `-8` / `--rom8` and `-e` / `--rome` flags.
+2. `system/BBKEmu/<model>/` relative to the current directory.
+
+```bash
+# Load a game with explicit ROM paths
+bbkemu -8 8.BIN -e E.BIN path/to/game.gam
+
+# Load a game (ROMs auto-discovered from system/BBKEmu/<model>/)
+bbkemu path/to/game.gam
+```
 
 You can always print the built-in help with:
 

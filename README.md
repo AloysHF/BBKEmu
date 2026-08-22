@@ -44,7 +44,7 @@ These files are not distributed with the emulator and must be obtained separatel
 
 Download the latest binary from the [Releases](https://github.com/AloysHF/BBKEmu/releases) page.
 
-The basic usage is listed below, but there are many more options for controlling the behavior of the emulator. See the [Command-line Options](docs/CLI-Options.md) documentation for the full list of options.
+The basic usage is listed below, but there are many more options for controlling the behavior of the emulator. See the [Standalone Emulator](docs/Standalone-Emulator.md) documentation for the full list of options.
 
 ```bash
 # Basic usage with ROM files
@@ -104,7 +104,7 @@ The libretro core also runs on iOS (iPhone / iPad). iOS currently requires manua
 #### Core Options
 
 Configurable from RetroArch's *Quick Menu → Core Options* (LCD orientation,
-CPU/Timer clock rate, key repeat interval). See [Core Options](docs/Core-Options.md) for the full list.
+CPU/Timer clock rate, key repeat interval). See [RetroArch Core](docs/RetroArch-Core.md) for the full list.
 
 #### RetroPad Button Mapping
 

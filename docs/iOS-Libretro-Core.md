@@ -87,7 +87,7 @@ The BBKEmu core should now appear in the core list automatically.
 
 ## Core Options
 
-BBKEmu on iOS supports the same core options as the desktop libretro core. See [Core Options](Core-Options.md) for details.
+BBKEmu on iOS supports the same core options as the desktop libretro core. See [RetroArch Core](RetroArch-Core.md) for details.
 
 ## Building the iOS core locally
 

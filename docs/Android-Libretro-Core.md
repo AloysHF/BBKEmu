@@ -54,7 +54,7 @@ The CI release workflow performs this packaging automatically.
 
 ## Core Options
 
-BBKEmu on Android supports the same core options as the desktop libretro core. See [Core Options](Core-Options.md) for details.
+BBKEmu on Android supports the same core options as the desktop libretro core. See [RetroArch Core](RetroArch-Core.md) for details.
 
 ## Troubleshooting
 
