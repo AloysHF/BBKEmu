@@ -6,7 +6,7 @@ license.workspace = true
 description = "BBK electronic dictionary game emulator - standalone frontend"
 
 [[bin]]
-name = "bbkemu-emu"
+name = "bbk-emu"
 path = "src/main.rs"
 
 [dependencies]

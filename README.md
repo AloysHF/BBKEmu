@@ -48,16 +48,16 @@ The basic usage is listed below, but there are many more options for controlling
 
 ```bash
 # Basic usage with ROM files
-bbkemu game.gam -8 8.BIN -e E.BIN
+bbk-emu game.gam -8 8.BIN -e E.BIN
 
 # If ROM files are in system/BBKEmu/<model>/
-bbkemu game.gam
+bbk-emu game.gam
 
 # With common options
-bbkemu game.gam --scale 4 --fullscreen --model 4980
+bbk-emu game.gam --scale 4 --fullscreen --model 4980
 
 # Headless mode for testing
-bbkemu game.gam --frames 100 --output screenshot.png
+bbk-emu game.gam --frames 100 --output screenshot.png
 ```
 
 **Keyboard shortcuts:** `F5` Save state | `F8` Load state | `F12` Screenshot | `Escape` Exit
@@ -128,7 +128,7 @@ cargo build -p bbkemu --release
 cargo run -p bbkemu --release -- game.gam
 ```
 
-The binary is produced at `target/release/bbkemu` (or `bbkemu.exe` on Windows).
+The binary is produced at `target/release/bbk-emu` (or `bbk-emu.exe` on Windows).
 
 ### Libretro Core (for RetroArch)
 
@@ -181,7 +181,7 @@ crates/
 │       ├── model.rs           # BBK model definitions (A4980, A4988)
 │       ├── debug.rs           # Debugger with breakpoints and watchpoints
 │       └── save.rs            # Save state serialization
-├── bbkemu/                    # Standalone binary (-> bbkemu)
+├── bbkemu/                    # Standalone binary (-> bbk-emu)
 │   └── src/
 │       └── main.rs            # Window loop and CLI frontend
 ├── bbkemu-libretro/           # libretro cdylib (-> bbkemu_libretro.{dll,so,dylib})

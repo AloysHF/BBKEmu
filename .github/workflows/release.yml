@@ -84,14 +84,14 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf ../../../${{ matrix.artifact }}.tar.gz bbkemu-emu
+          tar czf ../../../${{ matrix.artifact }}.tar.gz bbk-emu
           cd ../../..
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          7z a ../../../${{ matrix.artifact }}.zip bbkemu-emu.exe
+          7z a ../../../${{ matrix.artifact }}.zip bbk-emu.exe
           cd ../../..
 
       - name: Package libretro (Unix)
