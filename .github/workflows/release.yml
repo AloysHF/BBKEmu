@@ -20,6 +20,10 @@ jobs:
           - platform: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             artifact: bbk-emu-linux-aarch64
+          - platform: ubuntu-22.04
+            target: i686-unknown-linux-gnu
+            artifact: bbk-emu-linux-i686
+            libretro_only: true
           - platform: macos-latest
             target: x86_64-apple-darwin
             artifact: bbk-emu-macos-x86_64
@@ -29,6 +33,10 @@ jobs:
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             artifact: bbk-emu-windows-x86_64
+          - platform: windows-latest
+            target: i686-pc-windows-msvc
+            artifact: bbk-emu-windows-i686
+            libretro_only: true
 
     runs-on: ${{ matrix.platform }}
 
@@ -42,6 +50,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev
 
+      - name: Install 32-bit Linux build dependencies
+        if: matrix.target == 'i686-unknown-linux-gnu'
+        run: sudo apt-get install -y gcc-multilib
+
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -53,6 +65,10 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build standalone
+        # The standalone frontend pulls in winit/softbuffer/cpal, which would
+        # need a full set of 32-bit X11/ALSA dev packages; the 32-bit targets
+        # exist for RetroArch, so they build the core only, as on GitLab.
+        if: ${{ !matrix.libretro_only }}
         run: cargo build -p bbkemu --release --target ${{ matrix.target }}
 
       - name: Build libretro core
@@ -81,14 +97,14 @@ jobs:
           ls -la "$out"
 
       - name: Package (Unix)
-        if: runner.os != 'Windows'
+        if: ${{ runner.os != 'Windows' && !matrix.libretro_only }}
         run: |
           cd target/${{ matrix.target }}/release
           tar czf ../../../${{ matrix.artifact }}.tar.gz bbk-emu
           cd ../../..
 
       - name: Package (Windows)
-        if: runner.os == 'Windows'
+        if: ${{ runner.os == 'Windows' && !matrix.libretro_only }}
         run: |
           cd target/${{ matrix.target }}/release
           7z a ../../../${{ matrix.artifact }}.zip bbk-emu.exe
@@ -350,6 +366,8 @@ jobs:
             ### libretro core (for RetroArch)
             - Files ending in `-libretro.*` contain `bbkemu_libretro.<ext>`
               plus `bbkemu_libretro.info`, ready to drop into RetroArch.
+            - 32-bit builds ship the core only: `bbk-emu-linux-i686-libretro.tar.gz`
+              and `bbk-emu-windows-i686-libretro.zip`.
 
             ### Android libretro core (for RetroArch on Android)
             - `bbk-emu-android-libretro.tar.gz` contains
