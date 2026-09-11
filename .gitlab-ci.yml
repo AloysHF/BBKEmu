@@ -57,6 +57,9 @@ libretro-build-windows-x64:
 # unaffected — it uses SEH.) Building std from source with panic=abort removes
 # the unwinding machinery altogether, which is also the sounder behaviour for a
 # cdylib: a Rust panic must not unwind across the libretro C boundary.
+# The build image already provides nightly with rust-src. Reinstalling it fails
+# when rustup tries to rename image-layer files across filesystems, and
+# build-std does not require a precompiled target installed by rustup.
 libretro-build-windows-i686:
   extends:
     - .libretro-rust-windows-x64
@@ -65,9 +68,6 @@ libretro-build-windows-i686:
     TARGET_ARCH: i686-pc-windows-gnu
     CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER: i686-w64-mingw32-gcc
     RUSTFLAGS: "-Cpanic=abort"
-  before_script:
-    - rustup toolchain install nightly --component rust-src
-    - rustup +nightly target add i686-pc-windows-gnu
   script:
     - cargo +nightly build --release --target ${TARGET_ARCH} -Z build-std=std,panic_abort
 
