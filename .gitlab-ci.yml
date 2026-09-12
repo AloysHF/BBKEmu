@@ -60,20 +60,10 @@ libretro-build-windows-x64:
     - .core-defs
 
 # Windows 32-bit
-# Official template provides TARGET_ARCH and the mingw linker. The image's
-# MinGW 7.3-win32 uses SJLJ on 32-bit x86 while rustc expects DWARF-2, so keep
-# the known-good nightly build-std + panic=abort override until
-# rust-windows-i686.yml bakes that in (libretro/libretro-super#2099).
 libretro-build-windows-i686:
   extends:
-    - .libretro-rust-windows-i686
+    - .libretro-rust-windows-i686-default
     - .core-defs
-  variables:
-    RUSTFLAGS: "-Cpanic=abort"
-  before_script:
-    - rustup +nightly target add ${TARGET_ARCH}
-  script:
-    - cargo +nightly build --release --target ${TARGET_ARCH} -Z build-std=std,panic_abort
 
 # Linux 64-bit
 libretro-build-linux-x64:
