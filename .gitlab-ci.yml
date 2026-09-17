@@ -60,10 +60,37 @@ libretro-build-windows-x64:
     - .core-defs
 
 # Windows 32-bit
+# Not the official template as it stands: it builds std from source and never
+# adds the rustup target, and rsbegin.o and rsend.o - which every windows-gnu
+# link pulls in - come from library/rtstartup, built by the compiler's own
+# bootstrap and not by cargo. -Z build-std does not produce them
+# (wg-cargo-std-aware#46), so the link ends in "rsbegin.o: No such file or
+# directory". Only those two objects come from the precompiled target; the std
+# that gets linked is the one built here.
+#
+# std is built from source because the image's mingw is gcc 7.3-win32, which on
+# 32-bit x86 uses SJLJ exceptions while rustc's i686-pc-windows-gnu expects
+# DWARF-2 unwinding: its libgcc_eh has no _Unwind_Resume, so linking the
+# precompiled std fails. (The 64-bit job is unaffected - it uses SEH.) With
+# panic=abort the unwinding machinery is gone altogether, which is also the
+# sounder behaviour for a cdylib: a Rust panic must not unwind across the
+# libretro C boundary.
+#
+# The toolchain is not reinstalled here: the image already provides nightly
+# with rust-src, and rustup replacing a component that lives in an image layer
+# fails with "Invalid cross-device link".
 libretro-build-windows-i686:
   extends:
-    - .libretro-rust-windows-i686-default
+    - .libretro-rust-windows-x64
     - .core-defs
+  variables:
+    TARGET_ARCH: i686-pc-windows-gnu
+    CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER: i686-w64-mingw32-gcc
+    RUSTFLAGS: "-Cpanic=abort"
+  before_script:
+    - rustup +nightly target add ${TARGET_ARCH}
+  script:
+    - cargo +nightly build --release --target ${TARGET_ARCH} -Z build-std=std,panic_abort
 
 # Linux 64-bit
 libretro-build-linux-x64:
@@ -72,10 +99,19 @@ libretro-build-linux-x64:
     - .core-defs
 
 # Linux 32-bit
+# Same image and template as the x64 job, only the target changes: the image
+# already carries gcc-multilib, so all this needs is the rustup target. The
+# official template instead names i686-linux-gnu-gcc as the linker, which the
+# rust build image does not carry - the job ends in "linker
+# `i686-linux-gnu-gcc` not found".
 libretro-build-linux-i686:
   extends:
-    - .libretro-rust-linux-i686-default
+    - .libretro-rust-linux-x64
     - .core-defs
+  variables:
+    TARGET_ARCH: i686-unknown-linux-gnu
+  before_script:
+    - rustup target add ${TARGET_ARCH}
 
 # Linux aarch64
 libretro-build-linux-aarch64:
