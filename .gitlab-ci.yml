@@ -29,10 +29,12 @@ include:
     file: '/rust-linux-x64.yml'
 
   # Linux 32-bit
-  - project: 'libretro-infrastructure/ci-templates'
-    file: '/rust-linux-i686.yml'
+libretro-build-linux-i686:
+  extends:
+    - .libretro-rust-linux-i686-default
+    - .core-defs
 
-  # Linux aarch64
+# Linux aarch64
   - project: 'libretro-infrastructure/ci-templates'
     file: '/rust-linux-aarch64.yml'
 
@@ -60,37 +62,33 @@ libretro-build-windows-x64:
     - .core-defs
 
 # Windows 32-bit
-# Not the official template as it stands: it builds std from source and never
-# adds the rustup target, and rsbegin.o and rsend.o - which every windows-gnu
-# link pulls in - come from library/rtstartup, built by the compiler's own
-# bootstrap and not by cargo. -Z build-std does not produce them
-# (wg-cargo-std-aware#46), so the link ends in "rsbegin.o: No such file or
-# directory". Only those two objects come from the precompiled target; the std
-# that gets linked is the one built here.
-#
-# std is built from source because the image's mingw is gcc 7.3-win32, which on
-# 32-bit x86 uses SJLJ exceptions while rustc's i686-pc-windows-gnu expects
-# DWARF-2 unwinding: its libgcc_eh has no _Unwind_Resume, so linking the
-# precompiled std fails. (The 64-bit job is unaffected - it uses SEH.) With
-# panic=abort the unwinding machinery is gone altogether, which is also the
-# sounder behaviour for a cdylib: a Rust panic must not unwind across the
-# libretro C boundary.
-#
-# The toolchain is not reinstalled here: the image already provides nightly
-# with rust-src, and rustup replacing a component that lives in an image layer
-# fails with "Invalid cross-device link".
+# Not the official template: the image's i686 mingw is the SJLJ flavour, while
+# rustc's i686-pc-windows-gnu std unwinds with DWARF, so libgcc has no
+# _Unwind_Resume for it and the link ends there. The earlier nightly
+# -Z build-std workaround no longer links either: current std asks for
+# -lsynchronization, which the image's mingw-w64 runtime does not ship.
+# llvm-mingw carries a libunwind that does - stood in as libgcc_eh - plus an
+# empty libgcc for the -lgcc the same link line asks for. dlltool still has to
+# be the GNU one; rustc calls it itself for raw-dylib and llvm-dlltool does not
+# stand in. Same recipe as holani-retro, green on the current image.
 libretro-build-windows-i686:
   extends:
     - .libretro-rust-windows-x64
     - .core-defs
   variables:
     TARGET_ARCH: i686-pc-windows-gnu
-    CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER: i686-w64-mingw32-gcc
-    RUSTFLAGS: "-Cpanic=abort"
+    LLVM_MINGW: llvm-mingw-20230320-msvcrt-ubuntu-18.04-x86_64
+    STRIP: /opt/llvm-mingw-20230320-msvcrt-ubuntu-18.04-x86_64/bin/llvm-strip
+    CARGO_TARGET_I686_PC_WINDOWS_GNU_LINKER: /opt/llvm-mingw-20230320-msvcrt-ubuntu-18.04-x86_64/bin/i686-w64-mingw32-clang
+    CARGO_TARGET_I686_PC_WINDOWS_GNU_RUSTFLAGS: -L /opt/gcc-stub
   before_script:
-    - rustup +nightly target add ${TARGET_ARCH}
-  script:
-    - cargo +nightly build --release --target ${TARGET_ARCH} -Z build-std=std,panic_abort
+    - apt-get update -qy && apt-get install -yq binutils-mingw-w64-i686
+    - curl -sSL -o /tmp/llvm-mingw.tar.xz "https://github.com/mstorsjo/llvm-mingw/releases/download/20230320/$LLVM_MINGW.tar.xz"
+    - tar xJf /tmp/llvm-mingw.tar.xz -C /opt
+    - mkdir -p /opt/gcc-stub
+    - /opt/$LLVM_MINGW/bin/llvm-ar crs /opt/gcc-stub/libgcc.a
+    - cp /opt/$LLVM_MINGW/i686-w64-mingw32/lib/libunwind.a /opt/gcc-stub/libgcc_eh.a
+    - rustup target add ${TARGET_ARCH}
 
 # Linux 64-bit
 libretro-build-linux-x64:
