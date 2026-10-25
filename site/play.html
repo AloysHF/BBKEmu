@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="在浏览器中加载 BBK 游戏文件与固件即可直接运行，无需安装。由 EmulatorJS 与 BBKEmu WebAssembly 核心驱动。">
+  <meta name="theme-color" content="#0A0A0A">
+  <title>在线试玩 BBK 游戏 — BBKEmu</title>
+  <link rel="icon" type="image/png" href="res/logo.png">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .play-page::after { display: none; }
+
+    .play-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px 24px;
+    }
+
+    .play-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: 0.02em;
+    }
+    .play-brand img { border-radius: 6px; }
+
+    .play-header-links {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 18px;
+    }
+    .play-header-links a { color: var(--text-dim); font-size: 0.9rem; }
+    .play-header-links a:hover { color: var(--green); }
+
+    .play-main {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 8px 24px 64px;
+    }
+
+    .play-title { font-size: clamp(1.6rem, 4vw, 2.4rem); line-height: 1.2; }
+    .play-title span { color: var(--green); }
+
+    .play-subtitle { color: var(--text-dim); margin: 8px 0 20px; max-width: 68ch; }
+    .play-subtitle code { color: var(--text); font-size: 0.95em; }
+
+    .play-stage {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #050505;
+      border: 1px solid rgba(0, 255, 65, 0.25);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    }
+
+    .play-stage > #game { position: absolute; inset: 0; }
+    #game, #game canvas { width: 100% !important; height: 100% !important; }
+
+    .play-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 24px;
+      text-align: center;
+      background: rgba(5, 5, 5, 0.88);
+      backdrop-filter: blur(3px);
+    }
+
+    .play-overlay h2 { font-size: 1.3rem; }
+    .play-overlay p { color: var(--text-dim); max-width: 56ch; }
+    .play-overlay .btn { margin-top: 4px; }
+    .play-overlay[hidden] { display: none; }
+    .play-overlay code { font-family: var(--font-mono); font-size: 0.9em; }
+
+    .play-picker-files {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 14px 18px;
+    }
+
+    .play-file {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .play-file-name {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .play-file-name:empty { display: none; }
+
+    .play-picker-error { color: #ff6b5b; font-size: 0.85rem; }
+    .play-picker-hint { font-size: 0.78rem; color: #6b7280; }
+    .play-picker-hint a { color: var(--text-dim); text-decoration: underline; }
+
+    .play-stage.is-drop {
+      border-color: rgba(0, 255, 65, 0.7);
+      box-shadow: 0 0 0 3px rgba(0, 255, 65, 0.18), 0 20px 60px rgba(0, 0, 0, 0.45);
+    }
+
+    .play-controls {
+      margin-top: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      align-items: center;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    .play-controls kbd {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--text);
+      background: var(--dark-3);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-bottom-width: 2px;
+      border-radius: 5px;
+      padding: 1px 6px;
+    }
+
+    .play-reset {
+      margin-left: auto;
+      padding: 4px 14px;
+      font: inherit;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .play-reset:hover { color: var(--green); border-color: rgba(0, 255, 65, 0.45); }
+    .play-reset[hidden] { display: none; }
+
+    .play-note { margin-top: 12px; font-size: 0.8rem; color: #6b7280; }
+    .play-note a { color: var(--text-dim); text-decoration: underline; }
+
+    @media (max-width: 640px) {
+      .play-header { padding: 16px; }
+      .play-header-links { gap: 12px; }
+      .play-header-links .optional { display: none; }
+      .play-main { padding: 0 16px 40px; }
+      .play-stage { border-radius: 8px; }
+      .play-overlay {
+        justify-content: center;
+        justify-content: safe center;
+        padding: 16px;
+        gap: 10px;
+        overflow-y: auto;
+        scrollbar-width: none;
+      }
+      .play-overlay::-webkit-scrollbar { display: none; }
+      .play-overlay h2 { font-size: 1.1rem; }
+      .play-overlay p { font-size: 0.85rem; }
+      .play-picker-hint { font-size: 0.72rem; }
+    }
+  </style>
+</head>
+<body class="play-page">
+
+  <header class="play-header">
+    <a href="index.html" class="play-brand">
+      <img src="res/logo.png" alt="BBKEmu" width="32" height="32">
+      <span>BBKEmu</span>
+    </a>
+    <nav class="play-header-links">
+      <a href="index.html" data-i18n="nav-back">返回首页</a>
+      <button id="lang-toggle" class="lang-toggle" aria-label="Switch language">EN</button>
+      <a href="https://github.com/AloysHF/BBKEmu" class="optional" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </header>
+
+  <main class="play-main">
+    <h1 class="play-title" data-i18n="title">在线试玩 <span>BBK</span> 游戏</h1>
+    <p class="play-subtitle" data-i18n="subtitle">选择本机上的游戏文件（<code>.gam</code>）和固件 ZIP，由 <strong>EmulatorJS</strong> 与 BBKEmu WebAssembly 核心在浏览器中直接运行，无需安装。</p>
+
+    <div class="play-stage">
+      <div id="game"></div>
+
+      <div id="play-status" class="play-overlay" hidden>
+        <h2 data-i18n="status-title">正在加载核心…</h2>
+        <p data-i18n="status-desc">首次启动需要下载 WebAssembly 核心，请稍候。</p>
+      </div>
+
+      <div id="play-picker" class="play-overlay">
+        <h2 data-i18n="picker-title">选择固件与游戏</h2>
+        <p data-i18n="picker-desc">固件 ZIP 必须包含 <code>8.BIN</code>（字库）和 <code>E.BIN</code>（系统）两个文件。游戏选择 <code>.gam</code> 文件；带附属文件的游戏请打包成 ZIP。两个文件都选好后会自动启动。</p>
+        <div class="play-picker-files">
+          <div class="play-file">
+            <label class="btn btn-primary">
+              <span data-i18n="pick-firmware">选择固件 ZIP</span>
+              <input id="firmware-file" type="file" accept=".zip,application/zip" hidden>
+            </label>
+            <span id="firmware-name" class="play-file-name"></span>
+          </div>
+          <div class="play-file">
+            <label class="btn btn-primary">
+              <span data-i18n="pick-game">选择游戏文件</span>
+              <input id="game-file" type="file" accept=".gam,.zip,application/zip" hidden>
+            </label>
+            <span id="game-name" class="play-file-name"></span>
+          </div>
+        </div>
+        <p id="play-picker-error" class="play-picker-error" hidden></p>
+        <p class="play-picker-hint" data-i18n="picker-hint">也可以把文件拖进窗口。文件只在浏览器本地处理，不会被上传。可玩的游戏见 <a href="https://github.com/AloysHF/BBKEmu/blob/master/docs/GAME-COMPATIBILITY.md" target="_blank" rel="noopener">兼容列表</a>。</p>
+      </div>
+
+      <div id="play-error" class="play-overlay" hidden>
+        <h2 data-i18n="error-title">无法启动在线模拟器</h2>
+        <p data-i18n="error-text">EmulatorJS 运行时未部署（缺少 <code>data/loader.js</code>）。请通过 Pages 部署流程生成 <code>site/data</code>，或直接使用独立版模拟器。</p>
+      </div>
+    </div>
+
+    <div class="play-controls">
+      <span data-i18n="ctrl-move"><kbd>方向键</kbd> 移动</span>
+      <span data-i18n="ctrl-enter"><kbd>Enter</kbd> 确认</span>
+      <span data-i18n="ctrl-esc"><kbd>Esc</kbd> 退出</span>
+      <span data-i18n="ctrl-misc"><kbd>Space</kbd> / <kbd>Backspace</kbd> / <kbd>PgUp</kbd> / <kbd>PgDn</kbd></span>
+      <span data-i18n="ctrl-gamepad">支持手柄与手机触屏</span>
+      <button id="play-reset" class="play-reset" type="button" data-i18n="reset" hidden>换一个游戏</button>
+    </div>
+
+    <p class="play-note" data-i18n="note">在线试玩使用 <a href="https://emulatorjs.org" target="_blank" rel="noopener">EmulatorJS</a>，即时存档只保存在浏览器本地。固件与游戏数据不随本站分发，请使用自己合法持有的转储文件。想离线游玩？从 <a href="https://github.com/AloysHF/BBKEmu/releases" target="_blank" rel="noopener">Releases</a> 下载独立模拟器或 RetroArch 核心。</p>
+  </main>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var translations = {
+        zh: {
+          'meta-title': '在线试玩 BBK 游戏 — BBKEmu',
+          'meta-desc': '在浏览器中加载 BBK 游戏文件与固件即可直接运行，无需安装。由 EmulatorJS 与 BBKEmu WebAssembly 核心驱动。',
+          'nav-back': '返回首页',
+          'title': '在线试玩 <span>BBK</span> 游戏',
+          'subtitle': '选择本机上的游戏文件（<code>.gam</code>）和固件 ZIP，由 <strong>EmulatorJS</strong> 与 BBKEmu WebAssembly 核心在浏览器中直接运行，无需安装。',
+          'status-title': '正在加载核心…',
+          'status-desc': '首次启动需要下载 WebAssembly 核心，请稍候。',
+          'picker-title': '选择固件与游戏',
+          'picker-desc': '固件 ZIP 必须包含 <code>8.BIN</code>（字库）和 <code>E.BIN</code>（系统）两个文件。游戏选择 <code>.gam</code> 文件；带附属文件的游戏请打包成 ZIP。两个文件都选好后会自动启动。',
+          'pick-firmware': '选择固件 ZIP',
+          'pick-game': '选择游戏文件',
+          'picker-hint': '也可以把文件拖进窗口。文件只在浏览器本地处理，不会被上传。可玩的游戏见 <a href="https://github.com/AloysHF/BBKEmu/blob/master/docs/GAME-COMPATIBILITY.md" target="_blank" rel="noopener">兼容列表</a>。',
+          'error-title': '无法启动在线模拟器',
+          'error-text': 'EmulatorJS 运行时未部署（缺少 <code>data/loader.js</code>）。请通过 Pages 部署流程生成 <code>site/data</code>，或直接使用独立版模拟器。',
+          'ctrl-move': '<kbd>方向键</kbd> 移动',
+          'ctrl-enter': '<kbd>Enter</kbd> 确认',
+          'ctrl-esc': '<kbd>Esc</kbd> 退出',
+          'ctrl-misc': '<kbd>Space</kbd> / <kbd>Backspace</kbd> / <kbd>PgUp</kbd> / <kbd>PgDn</kbd>',
+          'ctrl-gamepad': '支持手柄与手机触屏',
+          'reset': '换一个游戏',
+          'note': '在线试玩使用 <a href="https://emulatorjs.org" target="_blank" rel="noopener">EmulatorJS</a>，即时存档只保存在浏览器本地。固件与游戏数据不随本站分发，请使用自己合法持有的转储文件。想离线游玩？从 <a href="https://github.com/AloysHF/BBKEmu/releases" target="_blank" rel="noopener">Releases</a> 下载独立模拟器或 RetroArch 核心。',
+          'invalid-firmware': '固件必须是包含 8.BIN 和 E.BIN 的 .zip 文件。',
+          'invalid-game': '仅支持 .gam 游戏文件或包含 .gam 的 .zip 文件。'
+        },
+        en: {
+          'meta-title': 'Play BBK Games Online — BBKEmu',
+          'meta-desc': 'Load a BBK game and firmware in your browser, no install required. Powered by EmulatorJS and the BBKEmu WebAssembly core.',
+          'nav-back': 'Back to Home',
+          'title': 'Play <span>BBK</span> Games Online',
+          'subtitle': 'Pick a game file (<code>.gam</code>) and a firmware ZIP — <strong>EmulatorJS</strong> and the BBKEmu WebAssembly core run it right in the browser.',
+          'status-title': 'Loading core…',
+          'status-desc': 'The first launch downloads the WebAssembly core.',
+          'picker-title': 'Choose firmware and a game',
+          'picker-desc': 'The firmware ZIP must contain <code>8.BIN</code> (font ROM) and <code>E.BIN</code> (OS ROM). Pick a <code>.gam</code> game; pack games with companion files into a ZIP. The game starts as soon as both files are selected.',
+          'pick-firmware': 'Choose Firmware ZIP',
+          'pick-game': 'Choose Game File',
+          'picker-hint': 'You can also drop files onto the window. Files are processed locally in your browser and never uploaded. See the <a href="https://github.com/AloysHF/BBKEmu/blob/master/docs/GAME-COMPATIBILITY.md" target="_blank" rel="noopener">compatibility list</a> for playable titles.',
+          'error-title': 'Unable to start the online emulator',
+          'error-text': 'The EmulatorJS runtime is not deployed (missing <code>data/loader.js</code>). Generate <code>site/data</code> through the Pages workflow, or use the standalone emulator.',
+          'ctrl-move': '<kbd>Arrows</kbd> Move',
+          'ctrl-enter': '<kbd>Enter</kbd> Confirm',
+          'ctrl-esc': '<kbd>Esc</kbd> Exit',
+          'ctrl-misc': '<kbd>Space</kbd> / <kbd>Backspace</kbd> / <kbd>PgUp</kbd> / <kbd>PgDn</kbd>',
+          'ctrl-gamepad': 'Gamepad and touch controls supported',
+          'reset': 'Play another game',
+          'note': 'Online play uses <a href="https://emulatorjs.org" target="_blank" rel="noopener">EmulatorJS</a>; save states stay in your browser only. Firmware and game data are not distributed with this site, so use your own legally dumped files. Prefer playing offline? Download the standalone emulator or the RetroArch core from <a href="https://github.com/AloysHF/BBKEmu/releases" target="_blank" rel="noopener">Releases</a>.',
+          'invalid-firmware': 'The firmware must be a .zip containing 8.BIN and E.BIN.',
+          'invalid-game': 'Only .gam game files or .zip archives containing a .gam are supported.'
+        }
+      };
+
+      var storageKey = 'bbk-lang';
+      var currentLang;
+      try {
+        currentLang = localStorage.getItem(storageKey) || (navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en');
+      } catch (error) {
+        currentLang = navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+      }
+
+      var languageButton = document.getElementById('lang-toggle');
+      var description = document.querySelector('meta[name="description"]');
+
+      function applyLang(lang) {
+        currentLang = lang;
+        document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+        var t = translations[lang];
+
+        document.querySelectorAll('[data-i18n]').forEach(function (el) {
+          var key = el.getAttribute('data-i18n');
+          if (t[key] !== undefined) el.innerHTML = t[key];
+        });
+
+        document.title = t['meta-title'];
+        if (description) description.setAttribute('content', t['meta-desc']);
+        languageButton.textContent = lang === 'zh' ? 'EN' : '中';
+        languageButton.setAttribute('aria-label', lang === 'zh' ? 'Switch to English' : '切换到中文');
+
+        try {
+          localStorage.setItem(storageKey, lang);
+        } catch (error) {
+          // Language persistence is optional in restricted browsing contexts.
+        }
+      }
+
+      var RUNTIME_PATH = 'data/';
+      var FIRMWARE_EXTENSIONS = /\.zip$/i;
+      var GAME_EXTENSIONS = /\.(gam|zip)$/i;
+      var stage = document.querySelector('.play-stage');
+      var status = document.getElementById('play-status');
+      var picker = document.getElementById('play-picker');
+      var pickerError = document.getElementById('play-picker-error');
+      var error = document.getElementById('play-error');
+      var firmwareInput = document.getElementById('firmware-file');
+      var gameInput = document.getElementById('game-file');
+      var firmwareName = document.getElementById('firmware-name');
+      var gameName = document.getElementById('game-name');
+      var resetButton = document.getElementById('play-reset');
+      var firmwareFile = null;
+      var gameFile = null;
+      var booted = false;
+
+      function show(element) { element.hidden = false; }
+      function hide(element) { element.hidden = true; }
+
+      function fail(messageKey) {
+        pickerError.textContent = translations[currentLang][messageKey];
+        show(pickerError);
+      }
+
+      function maybeBoot() {
+        if (!(firmwareFile && gameFile)) return;
+        if (booted) return;
+        booted = true;
+        hide(picker);
+        hide(error);
+        hide(pickerError);
+        show(status);
+
+        window.EJS_player = '#game';
+        window.EJS_core = 'bbkemu';
+        // Blob URLs have no file name, so EJS_gameName must keep the extension:
+        // EmulatorJS uses it to recognize the game archive entry.
+        window.EJS_gameUrl = URL.createObjectURL(gameFile);
+        window.EJS_gameName = gameFile.name;
+        // EmulatorJS decompresses the firmware archive and writes its entries
+        // next to the content, where the core looks for them on Emscripten.
+        window.EJS_biosUrl = URL.createObjectURL(firmwareFile);
+        window.EJS_pathtodata = RUNTIME_PATH;
+        window.EJS_startOnLoaded = false;
+        window.EJS_backgroundColor = '#0A0A0A';
+        // Only zh-CN is deployed next to the runtime; other languages use the
+        // built-in English UI.
+        if (currentLang === 'zh') window.EJS_language = 'zh-CN';
+
+        var runtime = document.createElement('script');
+        runtime.src = RUNTIME_PATH + 'loader.js';
+        runtime.onload = function () {
+          hide(status);
+          show(resetButton);
+        };
+        runtime.onerror = function () {
+          booted = false;
+          hide(status);
+          show(error);
+        };
+        document.body.appendChild(runtime);
+      }
+
+      firmwareInput.addEventListener('change', function () {
+        var file = firmwareInput.files && firmwareInput.files[0];
+        if (!file) return;
+        if (!FIRMWARE_EXTENSIONS.test(file.name)) {
+          firmwareFile = null;
+          firmwareName.textContent = '';
+          fail('invalid-firmware');
+        } else {
+          firmwareFile = file;
+          firmwareName.textContent = file.name;
+          hide(pickerError);
+        }
+        maybeBoot();
+      });
+
+      gameInput.addEventListener('change', function () {
+        var file = gameInput.files && gameInput.files[0];
+        if (!file) return;
+        if (!GAME_EXTENSIONS.test(file.name)) {
+          gameFile = null;
+          gameName.textContent = '';
+          fail('invalid-game');
+        } else {
+          gameFile = file;
+          gameName.textContent = file.name;
+          hide(pickerError);
+        }
+        maybeBoot();
+      });
+
+      var dragDepth = 0;
+
+      document.addEventListener('dragenter', function (event) {
+        event.preventDefault();
+        if (booted) return;
+        dragDepth += 1;
+        stage.classList.add('is-drop');
+      });
+
+      document.addEventListener('dragover', function (event) {
+        event.preventDefault();
+      });
+
+      document.addEventListener('dragleave', function (event) {
+        event.preventDefault();
+        if (booted) return;
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) stage.classList.remove('is-drop');
+      });
+
+      document.addEventListener('drop', function (event) {
+        event.preventDefault();
+        dragDepth = 0;
+        stage.classList.remove('is-drop');
+        if (booted) return;
+        var file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+        if (!file) return;
+        if (FIRMWARE_EXTENSIONS.test(file.name) && !firmwareFile) {
+          firmwareFile = file;
+          firmwareName.textContent = file.name;
+          hide(pickerError);
+        } else if (GAME_EXTENSIONS.test(file.name)) {
+          gameFile = file;
+          gameName.textContent = file.name;
+          hide(pickerError);
+        } else {
+          fail('invalid-game');
+        }
+        maybeBoot();
+      });
+
+      resetButton.addEventListener('click', function () {
+        window.location.reload();
+      });
+
+      languageButton.addEventListener('click', function () {
+        applyLang(currentLang === 'zh' ? 'en' : 'zh');
+      });
+
+      applyLang(currentLang);
+    })();
+  </script>
+</body>
+</html>

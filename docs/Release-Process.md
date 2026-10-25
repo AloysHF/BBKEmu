@@ -61,7 +61,9 @@ Pushing the tag triggers `.github/workflows/release.yml`, which:
 1. **Builds standalone binaries** for Linux (x86_64 + aarch64), macOS (x86_64 + aarch64), and Windows (x86_64)
 2. **Builds libretro cores** for the same platforms, renaming the cdylib to
    `bbkemu_libretro.<ext>` and bundling `bbkemu_libretro.info`
-3. **Creates a draft GitHub Release** with:
+3. **Builds the EmulatorJS browser core** (`bbkemu-emulatorjs.zip`) for the
+   project site and self-hosted EmulatorJS pages
+4. **Creates a draft GitHub Release** with:
    - Auto-generated release notes (PRs and commits since the previous tag)
    - A download table for standalone and libretro artifacts
    - All build artifacts attached
@@ -78,6 +80,7 @@ Pushing the tag triggers `.github/workflows/release.yml`, which:
    - `bbkemu-macos-aarch64.tar.gz`
    - `bbkemu-windows-x86_64.zip`
    - `*-libretro.*` (one per platform)
+   - `bbkemu-emulatorjs.zip` (browser core)
 5. Click **Publish release**
 
 ### 6. Sync `.info` file to upstream libretro-super

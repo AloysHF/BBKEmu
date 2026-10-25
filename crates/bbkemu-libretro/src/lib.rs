@@ -3,7 +3,7 @@
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_void};
 use std::panic;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use bbkemu_core::input::BbkKey;
 use bbkemu_core::lcd::LcdOrientation;
@@ -183,24 +183,37 @@ fn get_system_directory() -> Option<PathBuf> {
     }
 }
 
-/// Try to load ROM files for the given model
-fn load_roms_for_model(emu: &mut Emulator, model: &BbkModel) {
-    let Some(system_dir) = get_system_directory() else {
-        return;
-    };
-
-    let model_name = model.name;
-    let rom_dir = system_dir.join("BBKEmu").join(model_name);
-
-    // Load font ROM (8.BIN)
-    let rom8_path = rom_dir.join("8.BIN");
-    if let Ok(data) = std::fs::read(&rom8_path) {
-        emu.load_rom_8(&data);
+/// Try to load ROM files for the given model.
+///
+/// Desktop frontends install the firmware under `<system>/BBKEmu/<model>/`.
+/// EmulatorJS cannot write to that directory: it extracts an `EJS_biosUrl`
+/// archive beside the content file instead, so on Emscripten also look there.
+fn load_roms_for_model(emu: &mut Emulator, model: &BbkModel, content_path: Option<&Path>) {
+    let mut model_dirs = Vec::new();
+    if let Some(system_dir) = get_system_directory() {
+        model_dirs.push(system_dir.join("BBKEmu").join(model.name));
     }
 
-    // Load OS ROM (E.BIN)
-    let rom_e_path = rom_dir.join("E.BIN");
-    if let Ok(data) = std::fs::read(&rom_e_path) {
+    #[cfg(target_os = "emscripten")]
+    if let Some(path) = content_path {
+        let dir = path.parent().unwrap_or_else(|| Path::new("/"));
+        model_dirs.push(dir.to_path_buf());
+        model_dirs.push(dir.join("BBKEmu").join(model.name));
+    }
+    #[cfg(not(target_os = "emscripten"))]
+    let _ = content_path;
+
+    let find_rom = |names: &[&str]| {
+        model_dirs
+            .iter()
+            .flat_map(|dir| names.iter().map(move |name| dir.join(name)))
+            .find_map(|path| std::fs::read(path).ok())
+    };
+
+    if let Some(data) = find_rom(&["8.BIN", "8.bin"]) {
+        emu.load_rom_8(&data);
+    }
+    if let Some(data) = find_rom(&["E.BIN", "E.bin", "e.bin"]) {
         emu.load_rom_e(&data);
     }
 }
@@ -464,11 +477,19 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
             return false;
         }
         let game_data = std::slice::from_raw_parts(data, size);
+        let content_path = if (*info).path.is_null() {
+            None
+        } else {
+            CStr::from_ptr((*info).path)
+                .to_str()
+                .ok()
+                .map(PathBuf::from)
+        };
 
         if let Some(ref mut emu) = EMULATOR {
             // Load ROMs before loading the game
             let bbk_model = &model::MODEL_4980;
-            load_roms_for_model(emu, bbk_model);
+            load_roms_for_model(emu, bbk_model, content_path.as_deref());
 
             // Set input descriptors
             let inputs = [

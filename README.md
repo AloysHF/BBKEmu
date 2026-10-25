@@ -26,6 +26,7 @@ BBK (步步高) A-series electronic dictionary game emulator written in Rust. Pl
 - **GAM file support** — loads BBK game files with automatic header parsing
 - **Multiple models** — supports BBK A4980 and A4988 dictionaries
 - **RetroArch integration** — libretro core for use with RetroArch frontend
+- **Browser support** — WebAssembly core for EmulatorJS, no install required
 - **Developer tools** — debugger with breakpoints, watchpoints, and syscall logging
 - **Save states** — serialization support for save/load functionality
 
@@ -89,6 +90,17 @@ for install and build instructions.
 The libretro core also runs on iOS (iPhone / iPad). iOS currently requires manual core injection — see
 [iOS Libretro Core](docs/iOS-Libretro-Core.md) for install and build instructions.
 
+#### Browser (EmulatorJS)
+
+The core also runs in the browser through [EmulatorJS](https://emulatorjs.org).
+Open the [online player](https://AloysHF.github.io/BBKEmu/play.html), choose a
+`.gam` game and a firmware ZIP containing `8.BIN` and `E.BIN`, and it starts
+in the page. Files are read locally by the browser and are not uploaded.
+
+Every nightly publishes `bbkemu-emulatorjs.zip` for self-hosting. See
+[EmulatorJS Core](docs/EmulatorJS-Core.md) for the bundle layout, firmware
+setup and build instructions.
+
 #### Supported Features
 
 - ✅ Video output (RGB565 pixel format)
@@ -143,6 +155,21 @@ RetroArch's `cores/` directory.
 
 For Android cross-compilation, see [Android Libretro Core](docs/Android-Libretro-Core.md).
 For iOS, see [iOS Libretro Core](docs/iOS-Libretro-Core.md).
+
+### EmulatorJS Core (WebAssembly)
+
+The browser build needs a nightly toolchain, emsdk and p7zip. The prebuilt std
+must be rebuilt with `panic=abort` so Binaryen's Asyncify pass does not abort on
+wasm exception handling:
+
+```bash
+cargo build -p bbkemu-libretro --target wasm32-unknown-emscripten \
+  --profile wasm-release -Zbuild-std=std,panic_abort
+scripts/build-emulatorjs-core.sh
+```
+
+The bundle is written to `out/bbkemu-emulatorjs.zip`. See
+[EmulatorJS Core](docs/EmulatorJS-Core.md) for details.
 
 ## Testing
 
