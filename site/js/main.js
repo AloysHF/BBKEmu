@@ -189,9 +189,11 @@
       'nav-games': '游戏库',
       'nav-arch': '技术架构',
       'nav-quickstart': '快速开始',
+      'nav-play': '在线试玩',
       // hero
       'hero-subtitle': '让步步高电子词典游戏重获新生',
       'hero-desc': '用 Rust 编写的 BBK A 系列电子词典游戏模拟器，完整支持 152 款经典游戏',
+      'hero-play': '在线试玩',
       'hero-download': '下载',
       'hero-github': '查看源码',
       'hero-scroll': '向下滚动探索',
@@ -209,7 +211,7 @@
       'stat-lcd': 'LCD 分辨率',
       'stat-lcd-sub': '单色液晶屏',
       'stat-platforms': '目标平台',
-      'stat-platforms-sub': 'Windows / macOS / Linux / Android',
+      'stat-platforms-sub': 'Windows / macOS / Linux / Android / Web',
       'stat-lines': 'Rust 代码行数',
       'stat-lines-sub': '零 C 依赖',
       // features
@@ -239,6 +241,11 @@
       'arch-core': '核心引擎',
       'arch-core-sub': '平台无关的库',
       'arch-platforms': '目标平台',
+      // play online
+      'play-cta-badge': '无需安装 · 浏览器直接运行',
+      'play-cta-title': '在线试玩 BBK 游戏',
+      'play-cta-desc': '选择本机上的游戏文件与固件，即可在浏览器中直接运行。支持键盘、手柄与手机触屏，文件不会离开你的设备。',
+      'play-cta-btn': '开始试玩',
       // code
       'code-title': '纯 Rust，零妥协',
       'code-subtitle': '从 6502 CPU 到 LCD 帧缓冲区，全部用 Rust 从零实现',
@@ -264,6 +271,7 @@
       'footer-desc': '用 Rust 编写的 BBK 电子词典游戏模拟器',
       'footer-project': '项目',
       'footer-docs': '文档',
+      'footer-browser': '浏览器',
       'footer-specs': '技术规格',
       'footer-arch': '架构',
       'footer-memmap': '内存映射',
@@ -278,9 +286,11 @@
       'nav-games': 'Games',
       'nav-arch': 'Architecture',
       'nav-quickstart': 'Quick Start',
+      'nav-play': 'Play Online',
       // hero
       'hero-subtitle': 'Bring BBK electronic dictionary games back to life',
       'hero-desc': 'A BBK A-series electronic dictionary game emulator written in Rust, fully supporting 152 classic games',
+      'hero-play': 'Play Online',
       'hero-download': 'Download',
       'hero-github': 'View Source',
       'hero-scroll': 'Scroll to explore',
@@ -298,7 +308,7 @@
       'stat-lcd': 'LCD Resolution',
       'stat-lcd-sub': 'Monochrome LCD',
       'stat-platforms': 'Platforms',
-      'stat-platforms-sub': 'Windows / macOS / Linux / Android',
+      'stat-platforms-sub': 'Windows / macOS / Linux / Android / Web',
       'stat-lines': 'Lines of Rust',
       'stat-lines-sub': 'Zero C dependencies',
       // features
@@ -328,6 +338,11 @@
       'arch-core': 'Core Engine',
       'arch-core-sub': 'Platform-independent library',
       'arch-platforms': 'Platforms',
+      // play online
+      'play-cta-badge': 'No install · runs in your browser',
+      'play-cta-title': 'Play BBK Games Online',
+      'play-cta-desc': 'Pick a game file and firmware from your device and run it right in the browser. Keyboard, gamepad and touch controls are supported, and files never leave your machine.',
+      'play-cta-btn': 'Start Playing',
       // code
       'code-title': 'Pure Rust, Zero Compromise',
       'code-subtitle': 'From 6502 CPU to LCD framebuffer — everything built from scratch in Rust',
@@ -353,6 +368,7 @@
       'footer-desc': 'A BBK electronic dictionary game emulator written in Rust',
       'footer-project': 'Project',
       'footer-docs': 'Docs',
+      'footer-browser': 'Browser',
       'footer-specs': 'Specs',
       'footer-arch': 'Architecture',
       'footer-memmap': 'Memory Map',

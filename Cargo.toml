@@ -44,3 +44,9 @@ capstone = "0.14"
 opt-level = 3
 lto = true
 strip = true
+
+# Used only by the EmulatorJS build. `panic = "abort"` keeps wasm exception
+# handling out of the module, which Binaryen's Asyncify pass rejects.
+[profile.wasm-release]
+inherits = "release"
+panic = "abort"

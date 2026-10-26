@@ -7,7 +7,9 @@ description = "BBK electronic dictionary game emulator - libretro core"
 
 [lib]
 name = "bbkemu"
-crate-type = ["cdylib"]
+# `staticlib` is only consumed by the EmulatorJS build, which links the core
+# into the wasm frontend; native builds keep producing the cdylib.
+crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 bbkemu-core = { path = "../bbkemu-core" }

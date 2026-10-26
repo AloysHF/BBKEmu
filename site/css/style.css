@@ -1071,6 +1071,66 @@ body::after {
 }
 
 /* ============================================================
+   PLAY ONLINE CTA
+   ============================================================ */
+.nav-links a.nav-play {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.btn-play {
+  background: rgba(0, 255, 65, 0.1);
+  color: var(--green);
+  border: 1px solid rgba(0, 255, 65, 0.45);
+}
+
+.btn-play:hover {
+  background: rgba(0, 255, 65, 0.18);
+  border-color: var(--green);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 255, 65, 0.25);
+}
+
+#play .play-cta {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 32px;
+  align-items: center;
+  padding: 32px;
+  background: linear-gradient(135deg, rgba(0, 255, 65, 0.08), rgba(74, 144, 217, 0.1));
+  border: 1px solid rgba(0, 255, 65, 0.22);
+  border-radius: var(--radius);
+}
+
+.play-cta-cover img {
+  width: 100%;
+  border: 1px solid rgba(0, 255, 65, 0.25);
+  border-radius: 10px;
+  image-rendering: pixelated;
+}
+
+.play-cta-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(0, 255, 65, 0.12);
+  color: var(--green);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.play-cta-body h2 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  margin: 14px 0 10px;
+}
+
+.play-cta-body p {
+  color: var(--text-dim);
+  font-size: 0.98rem;
+  margin-bottom: 22px;
+}
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width: 1024px) {
@@ -1081,6 +1141,12 @@ body::after {
 }
 
 @media (max-width: 768px) {
+  #play .play-cta {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 24px;
+  }
+
   .nav-links { display: none; }
   .nav-links.open {
     display: flex;
