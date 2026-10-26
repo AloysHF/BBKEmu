@@ -24,6 +24,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      core_ready: ${{ steps.core.outputs.ready }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -45,8 +47,13 @@ jobs:
           # "Network Error".
           curl -fsSL "$EJS_DATA/compression/extract7z.js" -o site/data/compression/extract7z.js
           curl -fsSL "$EJS_DATA/compression/extractzip.js" -o site/data/compression/extractzip.js
+          # The play page asks EmulatorJS for zh-CN; the runtime archive does
+          # not carry any localization files, so fetch the one we advertise.
+          mkdir -p site/data/localization
+          curl -fsSL "$EJS_DATA/localization/zh-CN.json" -o site/data/localization/zh-CN.json
 
       - name: Fetch BBKEmu EmulatorJS core
+        id: core
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -56,11 +63,24 @@ jobs:
             unzip -oq "$RUNNER_TEMP/bbkemu-emulatorjs.zip" -d "$RUNNER_TEMP/ejs-core"
             cp "$RUNNER_TEMP/ejs-core/cores/"*.data site/data/cores/
             cp "$RUNNER_TEMP/ejs-core/cores/reports/"*.json site/data/cores/reports/
+            for name in bbkemu-wasm.data bbkemu-legacy-wasm.data; do
+              if [ ! -f "site/data/cores/$name" ]; then
+                echo "::error::The EmulatorJS zip is missing cores/$name; refusing to deploy a play page without a working core."
+                exit 1
+              fi
+            done
+            echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::No EmulatorJS core in the nightly-build release; the online play page will report a missing runtime."
+            # Deploying now would publish a play page whose core is missing
+            # (the nightly build for this commit has not finished yet). Leave
+            # the previous deployment in place and let the Nightly Build
+            # completion trigger redeploy with the core.
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::The nightly-build release has no EmulatorJS core yet; keeping the current Pages deployment."
           fi
 
       - name: Prepare deployment directory
+        if: steps.core.outputs.ready == 'true'
         run: |
           # Copy site files to repo root for deployment
           cp -r site/* .
@@ -68,6 +88,7 @@ jobs:
           touch .nojekyll
 
       - name: Upload artifact
+        if: steps.core.outputs.ready == 'true'
         uses: actions/upload-pages-artifact@v5
         with:
           path: '.'
@@ -78,7 +99,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    if: |
+      needs.build.outputs.core_ready == 'true' &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
