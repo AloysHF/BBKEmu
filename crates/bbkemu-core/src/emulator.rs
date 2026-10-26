@@ -561,13 +561,11 @@ impl Emulator {
     /// Render LCD to RGB565 buffer
     pub fn render_lcd(&mut self, buf: &mut [u16], ghosting: bool) {
         let theme = self.lcd_theme;
-
-        self.render_lcd_buffer();
+        let pixels = self.render_lcd_buffer();
 
         if ghosting {
-            self.lcd.render_with_ghosting(buf, &theme);
+            self.lcd.render_with_ghosting(buf, &pixels, &theme);
         } else {
-            let pixels = self.lcd.pixels();
             for i in 0..159 * 96 {
                 buf[i] = if pixels[i] { theme.fg } else { theme.bg };
             }
@@ -577,15 +575,13 @@ impl Emulator {
     /// Render LCD to RGB565 buffer with orientation support
     pub fn render_lcd_with_orientation(&mut self, buf: &mut [u16], ghosting: bool) {
         let theme = self.lcd_theme;
-
-        self.render_lcd_buffer();
+        let pixels = self.render_lcd_buffer();
 
         match self.lcd_orientation {
             LcdOrientation::Portrait => {
                 if ghosting {
-                    self.lcd.render_with_ghosting(buf, &theme);
+                    self.lcd.render_with_ghosting(buf, &pixels, &theme);
                 } else {
-                    let pixels = self.lcd.pixels();
                     for i in 0..159 * 96 {
                         buf[i] = if pixels[i] { theme.fg } else { theme.bg };
                     }
@@ -594,9 +590,9 @@ impl Emulator {
             LcdOrientation::Landscape => {
                 let mut portrait = [0u16; 159 * 96];
                 if ghosting {
-                    self.lcd.render_with_ghosting(&mut portrait, &theme);
+                    self.lcd
+                        .render_with_ghosting(&mut portrait, &pixels, &theme);
                 } else {
-                    let pixels = self.lcd.pixels();
                     for i in 0..159 * 96 {
                         portrait[i] = if pixels[i] { theme.fg } else { theme.bg };
                     }

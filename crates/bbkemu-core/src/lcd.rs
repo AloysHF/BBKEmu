@@ -247,7 +247,12 @@ impl Lcd {
     }
 
     /// Render with ghosting effect
-    pub fn render_with_ghosting(&mut self, buf: &mut [u16], theme: &LcdTheme) {
+    pub fn render_with_ghosting(
+        &mut self,
+        buf: &mut [u16],
+        pixels: &[bool; FRAMEBUFFER_SIZE],
+        theme: &LcdTheme,
+    ) {
         let bg_r = ((theme.bg >> 11) & 0x1F) as i16;
         let bg_g = ((theme.bg >> 6) & 0x1F) as i16;
         let bg_b = (theme.bg & 0x1F) as i16;
@@ -257,7 +262,7 @@ impl Lcd {
 
         for (i, pixel) in buf.iter_mut().enumerate().take(FRAMEBUFFER_SIZE) {
             // Update ghosting accumulator
-            if self.pixels[i] {
+            if pixels[i] {
                 if self.ghosting[i] < theme.ghosting as i8 {
                     self.ghosting[i] += 1;
                 }
