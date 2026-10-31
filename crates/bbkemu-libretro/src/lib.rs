@@ -13,11 +13,15 @@ use bbkemu_core::{model, BbkModel, Emulator};
 const RETRO_API_VERSION: u32 = 1;
 const RETRO_REGION_NTSC: u32 = 0;
 const RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY: u32 = 9;
+const RETRO_ENVIRONMENT_SET_PIXEL_FORMAT: u32 = 10;
 const RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS: u32 = 11;
 const RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK: u32 = 12;
 const RETRO_ENVIRONMENT_SET_VARIABLES: u32 = 16;
 const RETRO_ENVIRONMENT_GET_VARIABLE: u32 = 17;
 const RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: u32 = 18;
+
+// libretro pixel formats
+const RETRO_PIXEL_FORMAT_RGB565: u32 = 2;
 
 // libretro memory constants
 const RETRO_MEMORY_SAVE_RAM: u32 = 0;
@@ -501,6 +505,20 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
         ) else {
             return false;
         };
+
+        // Frames are emitted as u16 RGB565 samples; the frontend has to know
+        // that before it receives the first frame.
+        let mut pixel_format = RETRO_PIXEL_FORMAT_RGB565;
+        let declared = match ENVIRONMENT_CB {
+            Some(cb) => cb(
+                RETRO_ENVIRONMENT_SET_PIXEL_FORMAT,
+                &mut pixel_format as *mut _ as *mut c_void,
+            ),
+            None => false,
+        };
+        if !declared {
+            return false;
+        }
 
         if let Some(ref mut emu) = EMULATOR {
             // Load ROMs before loading the game
