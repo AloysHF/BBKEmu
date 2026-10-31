@@ -1020,40 +1020,92 @@ pub extern "C" fn retro_run() {
     })
 }
 
+/// Bytes advertised to the frontend for the serialized payload, excluding the
+/// envelope. The state itself is roughly 115 KiB (RAM plus the saved flash).
+const SAVE_STATE_CAPACITY: usize = 1024 * 1024;
+
+/// Save-state envelope: 4-byte magic followed by a little-endian format
+/// version. Bump the version whenever the core's state layout changes so stale
+/// states are rejected instead of silently restoring into the wrong fields.
+const SAVE_STATE_MAGIC: [u8; 4] = *b"BBKS";
+const SAVE_STATE_FORMAT: u32 = 1;
+const SAVE_STATE_HEADER_LEN: usize = SAVE_STATE_MAGIC.len() + std::mem::size_of::<u32>();
+
+fn write_save_state_header(buffer: &mut [u8]) {
+    buffer[..SAVE_STATE_MAGIC.len()].copy_from_slice(&SAVE_STATE_MAGIC);
+    buffer[SAVE_STATE_MAGIC.len()..SAVE_STATE_HEADER_LEN]
+        .copy_from_slice(&SAVE_STATE_FORMAT.to_le_bytes());
+}
+
+/// Returns `Some(payload)` when the envelope matches this build's format.
+fn read_save_state_payload(data: &[u8]) -> Option<&[u8]> {
+    if data.len() < SAVE_STATE_HEADER_LEN || data[..SAVE_STATE_MAGIC.len()] != SAVE_STATE_MAGIC {
+        return None;
+    }
+    let version = u32::from_le_bytes(
+        data[SAVE_STATE_MAGIC.len()..SAVE_STATE_HEADER_LEN]
+            .try_into()
+            .ok()?,
+    );
+    (version == SAVE_STATE_FORMAT).then(|| &data[SAVE_STATE_HEADER_LEN..])
+}
+
 #[no_mangle]
 pub extern "C" fn retro_serialize_size() -> usize {
-    guard(0, || 1024 * 1024)
+    guard(0, || SAVE_STATE_CAPACITY + SAVE_STATE_HEADER_LEN)
 }
 
 #[no_mangle]
 pub extern "C" fn retro_serialize(data: *mut c_void, size: usize) -> bool {
     guard(false, || unsafe {
-        if let Some(ref emu) = EMULATOR {
-            let state = emu.save_state();
-            let bytes = state.to_bytes();
-            if bytes.len() <= size {
-                std::ptr::copy_nonoverlapping(bytes.as_ptr(), data as *mut u8, bytes.len());
-                true
-            } else {
-                false
-            }
-        } else {
-            false
+        let Some(ref emu) = EMULATOR else {
+            return false;
+        };
+        if data.is_null() || size < SAVE_STATE_CAPACITY + SAVE_STATE_HEADER_LEN {
+            return false;
         }
+        let bytes = emu.save_state().to_bytes();
+        if bytes.len() > SAVE_STATE_CAPACITY {
+            log_message(
+                RETRO_LOG_ERROR,
+                "BBKEmu: the save state does not fit in the advertised buffer.",
+            );
+            return false;
+        }
+        let buffer = std::slice::from_raw_parts_mut(data as *mut u8, size);
+        write_save_state_header(buffer);
+        buffer[SAVE_STATE_HEADER_LEN..].fill(0);
+        buffer[SAVE_STATE_HEADER_LEN..SAVE_STATE_HEADER_LEN + bytes.len()].copy_from_slice(&bytes);
+        true
     })
 }
 
 #[no_mangle]
 pub extern "C" fn retro_unserialize(data: *const c_void, size: usize) -> bool {
     guard(false, || unsafe {
-        if let Some(ref mut emu) = EMULATOR {
-            let bytes = std::slice::from_raw_parts(data as *const u8, size);
-            match bbkemu_core::save::SaveState::from_bytes(bytes) {
-                Ok(state) => emu.load_save_state(&state).is_ok(),
-                Err(_) => false,
+        let Some(ref mut emu) = EMULATOR else {
+            return false;
+        };
+        if data.is_null() {
+            return false;
+        }
+        let bytes = std::slice::from_raw_parts(data as *const u8, size);
+        let Some(payload) = read_save_state_payload(bytes) else {
+            log_message(
+                RETRO_LOG_WARN,
+                "BBKEmu: rejecting a save state with an unknown format or version.",
+            );
+            return false;
+        };
+        match bbkemu_core::save::SaveState::from_bytes(payload) {
+            Ok(state) => emu.load_save_state(&state).is_ok(),
+            Err(error) => {
+                log_message(
+                    RETRO_LOG_WARN,
+                    &format!("BBKEmu: rejecting a corrupt save state ({error})."),
+                );
+                false
             }
-        } else {
-            false
         }
     })
 }
@@ -1161,4 +1213,82 @@ pub extern "C" fn retro_get_memory_size(id: u32) -> usize {
             }
         }
     })
+}
+
+#[cfg(test)]
+mod save_state_tests {
+    use super::*;
+
+    #[test]
+    fn save_state_envelope_rejects_other_versions() {
+        let mut buffer = [0_u8; SAVE_STATE_HEADER_LEN + 3];
+        buffer[SAVE_STATE_HEADER_LEN..].copy_from_slice(&[1, 2, 3]);
+        write_save_state_header(&mut buffer);
+        assert_eq!(
+            read_save_state_payload(&buffer),
+            Some(&[1_u8, 2, 3][..]),
+            "a freshly written envelope must be accepted"
+        );
+
+        buffer[SAVE_STATE_MAGIC.len()] = 0xFF;
+        assert_eq!(
+            read_save_state_payload(&buffer),
+            None,
+            "a state from another format version must be rejected"
+        );
+
+        let truncated = [0_u8; SAVE_STATE_HEADER_LEN - 1];
+        assert_eq!(
+            read_save_state_payload(&truncated),
+            None,
+            "a buffer shorter than the envelope must be rejected"
+        );
+    }
+
+    #[test]
+    fn save_state_envelope_rejects_foreign_magic() {
+        let mut buffer = [0_u8; SAVE_STATE_HEADER_LEN];
+        write_save_state_header(&mut buffer);
+        buffer[..SAVE_STATE_MAGIC.len()].copy_from_slice(b"N32S");
+        assert_eq!(read_save_state_payload(&buffer), None);
+    }
+
+    #[test]
+    fn zero_padded_envelope_round_trips() {
+        use bbkemu_core::save::{BankState, CpuState, SaveState};
+
+        let state = SaveState {
+            ram: vec![0xAB; 64],
+            flash: vec![0xCD; 32],
+            cpu: CpuState {
+                pc: 0x0400,
+                sp: 0xFD,
+                a: 1,
+                x: 2,
+                y: 3,
+                status: 0x30,
+                cycles: 12345,
+            },
+            bank_switch: BankState {
+                banks: vec![0, 1, 2, 3],
+                selected: 1,
+            },
+            bank_sys_d: 0x1234,
+            flash_cmd: 0,
+            flash_cycles: 0,
+        };
+        let bytes = state.to_bytes();
+
+        let mut buffer = vec![0_u8; SAVE_STATE_CAPACITY + SAVE_STATE_HEADER_LEN];
+        write_save_state_header(&mut buffer);
+        buffer[SAVE_STATE_HEADER_LEN..SAVE_STATE_HEADER_LEN + bytes.len()].copy_from_slice(&bytes);
+
+        let payload = read_save_state_payload(&buffer).expect("envelope must validate");
+        let restored = SaveState::from_bytes(payload).expect("padded payload must decode");
+        assert_eq!(restored.ram, state.ram);
+        assert_eq!(restored.flash, state.flash);
+        assert_eq!(restored.cpu.cycles, state.cpu.cycles);
+        assert_eq!(restored.bank_switch.banks, state.bank_switch.banks);
+        assert_eq!(restored.bank_sys_d, state.bank_sys_d);
+    }
 }
