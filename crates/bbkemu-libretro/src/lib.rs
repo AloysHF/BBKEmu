@@ -276,6 +276,29 @@ fn fail(message: &str) -> bool {
     false
 }
 
+/// Run `body`, turning a panic into `fallback`.
+///
+/// A panic must never unwind across the C ABI: the frontend is a host process
+/// (RetroArch, a mobile app) that would be torn down with us. Swallowing the
+/// panic keeps the session recoverable and leaves a log entry behind.
+fn guard<T>(fallback: T, body: impl FnOnce() -> T) -> T {
+    match panic::catch_unwind(panic::AssertUnwindSafe(body)) {
+        Ok(value) => value,
+        Err(payload) => {
+            let detail = payload
+                .downcast_ref::<&str>()
+                .map(|text| (*text).to_owned())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "unknown panic".to_owned());
+            log_message(
+                RETRO_LOG_ERROR,
+                &format!("BBKEmu libretro entry point panicked: {detail}"),
+            );
+            fallback
+        }
+    }
+}
+
 /// Get the save directory from the frontend.
 ///
 /// Saves must never be written next to the content: Android hands the core a
@@ -499,34 +522,31 @@ pub extern "C" fn retro_api_version() -> u32 {
 
 #[no_mangle]
 pub extern "C" fn retro_init() {
-    // Set up panic handler to prevent UB from unwinding across FFI boundary
-    panic::set_hook(Box::new(|info| {
-        eprintln!("BBKEmu panic: {}", info);
-    }));
+    // Keep a diagnostic for panics that happen outside the guarded entry
+    // points; guarded ones are logged with their payload instead.
+    panic::set_hook(Box::new(|info| log::error!("BBKEmu panic: {info}")));
 
-    let result = panic::catch_unwind(|| unsafe {
+    guard((), || unsafe {
         let mut emu = Emulator::new(&model::MODEL_4980);
         apply_core_options(&mut emu);
         EMULATOR = Some(emu);
     });
-
-    if result.is_err() {
-        eprintln!("BBKEmu: panic during retro_init");
-    }
 }
 
 #[no_mangle]
 pub extern "C" fn retro_deinit() {
-    persist_battery_save();
-    unsafe {
-        EMULATOR = None;
-        BATTERY_SAVE_PATH = None;
-    }
+    guard((), || {
+        persist_battery_save();
+        unsafe {
+            EMULATOR = None;
+            BATTERY_SAVE_PATH = None;
+        }
+    });
 }
 
 #[no_mangle]
 pub extern "C" fn retro_set_environment(cb: RetroEnvironmentT) {
-    unsafe {
+    guard((), || unsafe {
         ENVIRONMENT_CB = cb;
 
         // Set keyboard callback
@@ -560,42 +580,42 @@ pub extern "C" fn retro_set_environment(cb: RetroEnvironmentT) {
                 options.as_ptr() as *mut c_void,
             );
         }
-    }
+    });
 }
 
 #[no_mangle]
 pub extern "C" fn retro_set_video_refresh(cb: RetroVideoRefreshT) {
-    unsafe {
+    guard((), || unsafe {
         VIDEO_CB = cb;
-    }
+    });
 }
 
 #[no_mangle]
 pub extern "C" fn retro_set_audio_sample(cb: RetroAudioSampleT) {
-    unsafe {
+    guard((), || unsafe {
         AUDIO_CB = cb;
-    }
+    });
 }
 
 #[no_mangle]
 pub extern "C" fn retro_set_audio_sample_batch(cb: RetroAudioSampleBatchT) {
-    unsafe {
+    guard((), || unsafe {
         AUDIO_BATCH_CB = cb;
-    }
+    });
 }
 
 #[no_mangle]
 pub extern "C" fn retro_set_input_poll(cb: RetroInputPollT) {
-    unsafe {
+    guard((), || unsafe {
         INPUT_POLL_CB = cb;
-    }
+    });
 }
 
 #[no_mangle]
 pub extern "C" fn retro_set_input_state(cb: RetroInputStateT) {
-    unsafe {
+    guard((), || unsafe {
         INPUT_STATE_CB = cb;
-    }
+    });
 }
 
 /// Map RetroArch keyboard key to BBK key
@@ -638,11 +658,13 @@ unsafe extern "C" fn keyboard_callback(
 /// `info` must be a valid pointer to a `RetroSystemInfo` struct.
 #[no_mangle]
 pub unsafe extern "C" fn retro_get_system_info(info: *mut RetroSystemInfo) {
-    (*info).library_name = c"BBKEmu".as_ptr();
-    (*info).library_version = c"0.1.0".as_ptr();
-    (*info).valid_extensions = c"gam".as_ptr();
-    (*info).need_fullpath = true;
-    (*info).block_extract = false;
+    guard((), || {
+        (*info).library_name = c"BBKEmu".as_ptr();
+        (*info).library_version = c"0.1.0".as_ptr();
+        (*info).valid_extensions = c"gam".as_ptr();
+        (*info).need_fullpath = true;
+        (*info).block_extract = false;
+    });
 }
 
 /// # Safety
@@ -650,20 +672,22 @@ pub unsafe extern "C" fn retro_get_system_info(info: *mut RetroSystemInfo) {
 /// `info` must be a valid pointer to a `RetroSystemAvInfo` struct.
 #[no_mangle]
 pub unsafe extern "C" fn retro_get_system_av_info(info: *mut RetroSystemAvInfo) {
-    if let Some(ref emu) = EMULATOR {
-        (*info).geometry.base_width = emu.display_width() as u32;
-        (*info).geometry.base_height = emu.display_height() as u32;
-        (*info).geometry.max_width = emu.display_width() as u32;
-        (*info).geometry.max_height = emu.display_height() as u32;
-    } else {
-        (*info).geometry.base_width = 159;
-        (*info).geometry.base_height = 96;
-        (*info).geometry.max_width = 159;
-        (*info).geometry.max_height = 96;
-    }
-    (*info).geometry.aspect_ratio = 0.0;
-    (*info).timing.fps = 60.0;
-    (*info).timing.sample_rate = AUDIO_SAMPLE_RATE as f64;
+    guard((), || {
+        if let Some(ref emu) = EMULATOR {
+            (*info).geometry.base_width = emu.display_width() as u32;
+            (*info).geometry.base_height = emu.display_height() as u32;
+            (*info).geometry.max_width = emu.display_width() as u32;
+            (*info).geometry.max_height = emu.display_height() as u32;
+        } else {
+            (*info).geometry.base_width = 159;
+            (*info).geometry.base_height = 96;
+            (*info).geometry.max_width = 159;
+            (*info).geometry.max_height = 96;
+        }
+        (*info).geometry.aspect_ratio = 0.0;
+        (*info).timing.fps = 60.0;
+        (*info).timing.sample_rate = AUDIO_SAMPLE_RATE as f64;
+    });
 }
 
 /// Input descriptor for RetroArch
@@ -682,7 +706,7 @@ struct RetroInputDescriptor {
 /// `(*info).data` must be a valid pointer to `(*info).size` bytes of game data.
 #[no_mangle]
 pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
-    let result = panic::catch_unwind(|| {
+    guard(false, || {
         if info.is_null() {
             return fail("BBKEmu: the frontend passed no content information.");
         }
@@ -855,23 +879,17 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
                 "BBKEmu: failed to load this game.\n{error}\n\nSupported content: .gam"
             )),
         }
-    });
-
-    match result {
-        Ok(val) => val,
-        Err(_) => {
-            log_message(RETRO_LOG_ERROR, "BBKEmu: panic during retro_load_game");
-            false
-        }
-    }
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn retro_unload_game() {
-    persist_battery_save();
-    unsafe {
-        BATTERY_SAVE_PATH = None;
-    }
+    guard((), || {
+        persist_battery_save();
+        unsafe {
+            BATTERY_SAVE_PATH = None;
+        }
+    });
 }
 
 /// Default joypad button to BBK key mapping (A4980)
@@ -913,7 +931,7 @@ static mut JOYPAD_REPEAT: i32 = 0;
 
 #[no_mangle]
 pub extern "C" fn retro_run() {
-    let _ = panic::catch_unwind(|| {
+    guard((), || {
         unsafe {
             if let Some(ref mut emu) = EMULATOR {
                 // 0. Check for core option updates
@@ -999,17 +1017,17 @@ pub extern "C" fn retro_run() {
                 }
             }
         }
-    });
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn retro_serialize_size() -> usize {
-    1024 * 1024
+    guard(0, || 1024 * 1024)
 }
 
 #[no_mangle]
 pub extern "C" fn retro_serialize(data: *mut c_void, size: usize) -> bool {
-    let result = panic::catch_unwind(|| unsafe {
+    guard(false, || unsafe {
         if let Some(ref emu) = EMULATOR {
             let state = emu.save_state();
             let bytes = state.to_bytes();
@@ -1022,13 +1040,12 @@ pub extern "C" fn retro_serialize(data: *mut c_void, size: usize) -> bool {
         } else {
             false
         }
-    });
-    result.unwrap_or(false)
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn retro_unserialize(data: *const c_void, size: usize) -> bool {
-    let result = panic::catch_unwind(|| unsafe {
+    guard(false, || unsafe {
         if let Some(ref mut emu) = EMULATOR {
             let bytes = std::slice::from_raw_parts(data as *const u8, size);
             match bbkemu_core::save::SaveState::from_bytes(bytes) {
@@ -1038,8 +1055,7 @@ pub extern "C" fn retro_unserialize(data: *const c_void, size: usize) -> bool {
         } else {
             false
         }
-    });
-    result.unwrap_or(false)
+    })
 }
 
 #[no_mangle]
@@ -1047,7 +1063,7 @@ pub extern "C" fn retro_reset() {}
 
 #[no_mangle]
 pub extern "C" fn retro_cheat_reset() {
-    let _ = panic::catch_unwind(|| unsafe {
+    guard((), || unsafe {
         if let Some(ref mut emu) = EMULATOR {
             emu.cheat.clear();
         }
@@ -1059,7 +1075,7 @@ pub extern "C" fn retro_cheat_reset() {
 /// `code` must be a valid pointer to a null-terminated C string, or null.
 #[no_mangle]
 pub unsafe extern "C" fn retro_cheat_set(index: u32, enabled: bool, code: *const c_char) {
-    let _ = panic::catch_unwind(|| {
+    guard((), || {
         if code.is_null() {
             return;
         }
@@ -1104,7 +1120,7 @@ pub extern "C" fn retro_get_region() -> u32 {
 
 #[no_mangle]
 pub extern "C" fn retro_get_memory_data(id: u32) -> *mut c_void {
-    unsafe {
+    guard(std::ptr::null_mut(), || unsafe {
         if let Some(ref mut emu) = EMULATOR {
             match id {
                 RETRO_MEMORY_SAVE_RAM => {
@@ -1120,27 +1136,29 @@ pub extern "C" fn retro_get_memory_data(id: u32) -> *mut c_void {
         } else {
             std::ptr::null_mut()
         }
-    }
+    })
 }
 
 #[no_mangle]
 pub extern "C" fn retro_get_memory_size(id: u32) -> usize {
-    #[allow(static_mut_refs)]
-    unsafe {
-        if EMULATOR.is_some() {
-            match id {
-                RETRO_MEMORY_SAVE_RAM => {
-                    // Save area: first 0x14000 bytes of flash
-                    0x14000
+    guard(0, || {
+        #[allow(static_mut_refs)]
+        unsafe {
+            if EMULATOR.is_some() {
+                match id {
+                    RETRO_MEMORY_SAVE_RAM => {
+                        // Save area: first 0x14000 bytes of flash
+                        0x14000
+                    }
+                    RETRO_MEMORY_SYSTEM_RAM => {
+                        // Full RAM size
+                        0x8000
+                    }
+                    _ => 0,
                 }
-                RETRO_MEMORY_SYSTEM_RAM => {
-                    // Full RAM size
-                    0x8000
-                }
-                _ => 0,
+            } else {
+                0
             }
-        } else {
-            0
         }
-    }
+    })
 }
