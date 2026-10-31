@@ -19,6 +19,7 @@ const RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK: u32 = 12;
 const RETRO_ENVIRONMENT_SET_VARIABLES: u32 = 16;
 const RETRO_ENVIRONMENT_GET_VARIABLE: u32 = 17;
 const RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: u32 = 18;
+const RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY: u32 = 31;
 
 // libretro pixel formats
 const RETRO_PIXEL_FORMAT_RGB565: u32 = 2;
@@ -144,6 +145,15 @@ static mut INPUT_STATE_CB: RetroInputStateT = None;
 #[allow(dead_code)]
 static mut KEYBOARD_CB: RetroKeyboardCallbackT = None;
 
+/// Battery save file chosen for the currently loaded game, if any.
+static mut BATTERY_SAVE_PATH: Option<PathBuf> = None;
+
+/// Size of the battery-backed flash sector.
+///
+/// Save data lives in the last 32 KiB of flash; the bus rotates that sector to
+/// the front of the backing store, so it is the first `0x8000` bytes here.
+const BATTERY_SAVE_LEN: usize = 0x8000;
+
 /// Keyboard callback struct for RetroArch
 #[repr(C)]
 struct RetroKeyboardCallback {
@@ -189,6 +199,74 @@ fn get_system_directory() -> Option<PathBuf> {
             return Some(PathBuf::from(cstr.to_str().ok()?));
         }
         None
+    }
+}
+
+/// Get the save directory from the frontend.
+///
+/// Saves must never be written next to the content: Android hands the core a
+/// disposable cache copy of the user's document, so the save would be lost.
+fn get_save_directory() -> Option<PathBuf> {
+    unsafe {
+        let cb = ENVIRONMENT_CB?;
+        let mut dir: *const c_char = std::ptr::null();
+        if cb(
+            RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY,
+            &mut dir as *mut _ as *mut c_void,
+        ) && !dir.is_null()
+        {
+            let cstr = CStr::from_ptr(dir);
+            return Some(PathBuf::from(cstr.to_str().ok()?));
+        }
+        None
+    }
+}
+
+/// Battery save file for the given content, inside the frontend save directory.
+fn battery_save_path(content_path: Option<&Path>) -> Option<PathBuf> {
+    let stem = content_path?.file_stem()?.to_str()?;
+    Some(get_save_directory()?.join(format!("{stem}.sav")))
+}
+
+/// Copy the persisted battery save into the emulated flash save sector.
+fn restore_battery_save(emu: &mut Emulator, path: &Path) {
+    match std::fs::read(path) {
+        Ok(bytes) => {
+            let len = bytes.len().min(BATTERY_SAVE_LEN);
+            let flash = emu.cpu.memory_mut().flash.as_mut_slice();
+            flash[..len].copy_from_slice(&bytes[..len]);
+            log::info!(
+                "Battery save loaded from {} ({} bytes)",
+                path.display(),
+                len
+            );
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => log::warn!("Failed to read battery save {}: {error}", path.display()),
+    }
+}
+
+/// Write the emulated flash save sector to the frontend save directory.
+#[allow(static_mut_refs)]
+fn persist_battery_save() {
+    let Some(path) = (unsafe { BATTERY_SAVE_PATH.clone() }) else {
+        return;
+    };
+    let Some(emu) = (unsafe { EMULATOR.as_ref() }) else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        if let Err(error) = std::fs::create_dir_all(parent) {
+            log::warn!(
+                "Failed to create save directory {}: {error}",
+                parent.display()
+            );
+            return;
+        }
+    }
+    match std::fs::write(&path, &emu.cpu.memory().flash[..BATTERY_SAVE_LEN]) {
+        Ok(()) => log::info!("Battery save written to {}", path.display()),
+        Err(error) => log::warn!("Failed to write battery save {}: {error}", path.display()),
     }
 }
 
@@ -338,8 +416,10 @@ pub extern "C" fn retro_init() {
 
 #[no_mangle]
 pub extern "C" fn retro_deinit() {
+    persist_battery_save();
     unsafe {
         EMULATOR = None;
+        BATTERY_SAVE_PATH = None;
     }
 }
 
@@ -636,6 +716,13 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
             if result.is_ok() {
                 // Apply model-specific joypad remapping after game is loaded
                 apply_joypad_remapping_for_model(emu.model());
+                // Content may live in a throwaway location (a browser MEMFS
+                // tree or an Android app cache copy of a SAF document), so keep
+                // battery saves in the frontend's persistent save directory.
+                if let Some(path) = battery_save_path(content_path.as_deref()) {
+                    restore_battery_save(emu, &path);
+                    BATTERY_SAVE_PATH = Some(path);
+                }
             }
             result.is_ok()
         } else {
@@ -653,7 +740,12 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
 }
 
 #[no_mangle]
-pub extern "C" fn retro_unload_game() {}
+pub extern "C" fn retro_unload_game() {
+    persist_battery_save();
+    unsafe {
+        BATTERY_SAVE_PATH = None;
+    }
+}
 
 /// Default joypad button to BBK key mapping (A4980)
 static mut JOYK: [BbkKey; 16] = [
