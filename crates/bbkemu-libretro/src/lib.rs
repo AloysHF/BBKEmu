@@ -660,7 +660,8 @@ unsafe extern "C" fn keyboard_callback(
 pub unsafe extern "C" fn retro_get_system_info(info: *mut RetroSystemInfo) {
     guard((), || {
         (*info).library_name = c"BBKEmu".as_ptr();
-        (*info).library_version = c"0.1.0".as_ptr();
+        (*info).library_version =
+            concat!(env!("CARGO_PKG_VERSION"), "\0").as_ptr() as *const c_char;
         (*info).valid_extensions = c"gam".as_ptr();
         (*info).need_fullpath = true;
         (*info).block_extract = false;
