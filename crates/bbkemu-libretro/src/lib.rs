@@ -23,6 +23,11 @@ const RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: u32 = 18;
 // libretro pixel formats
 const RETRO_PIXEL_FORMAT_RGB565: u32 = 2;
 
+/// Sample rate reported in the AV info and used by the emulated sound chip.
+const AUDIO_SAMPLE_RATE: usize = 44100;
+/// The emulator runs at 60 fps, so one video frame carries 735 stereo frames.
+const AUDIO_FRAMES_PER_VIDEO_FRAME: usize = AUDIO_SAMPLE_RATE / 60;
+
 // libretro memory constants
 const RETRO_MEMORY_SAVE_RAM: u32 = 0;
 const RETRO_MEMORY_SYSTEM_RAM: u32 = 2;
@@ -467,7 +472,7 @@ pub unsafe extern "C" fn retro_get_system_av_info(info: *mut RetroSystemAvInfo) 
     }
     (*info).geometry.aspect_ratio = 0.0;
     (*info).timing.fps = 60.0;
-    (*info).timing.sample_rate = 44100.0;
+    (*info).timing.sample_rate = AUDIO_SAMPLE_RATE as f64;
 }
 
 /// Input descriptor for RetroArch
@@ -759,6 +764,19 @@ pub extern "C" fn retro_run() {
                         display_height,
                         (display_width * 2) as usize, // pitch = width * bytes_per_pixel (RGB565 = 2 bytes)
                     );
+                }
+
+                // 6. Send one frame of signed 16-bit stereo audio
+                if let Some(batch_cb) = AUDIO_BATCH_CB {
+                    let mut mono = [0.0f32; AUDIO_FRAMES_PER_VIDEO_FRAME];
+                    emu.audio.mix_samples(&mut mono);
+                    let mut stereo = [0i16; AUDIO_FRAMES_PER_VIDEO_FRAME * 2];
+                    for (frame, sample) in mono.iter().enumerate() {
+                        let value = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+                        stereo[frame * 2] = value;
+                        stereo[frame * 2 + 1] = value;
+                    }
+                    batch_cb(stereo.as_ptr(), AUDIO_FRAMES_PER_VIDEO_FRAME);
                 }
             }
         }
