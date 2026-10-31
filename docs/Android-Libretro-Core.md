@@ -52,6 +52,26 @@ Each ABI produces `libbbkemu.so`; rename it to
 `bbkemu_libretro_android.so` when installing into RetroArch on Android.
 The CI release workflow performs this packaging automatically.
 
+## RetroDroid
+
+The same core ships inside [RetroDroid](https://github.com/AloysHF/RetroDroid),
+the all-in-one Android app for this emulator family. RetroDroid loads the
+`lib*.so` directly (no RetroArch required) and reads the neighbouring
+`android.json` for the system profile: display names, content extensions,
+virtual-controller preset, firmware requirements and orientation.
+
+Rules the core follows for any Android host:
+
+- Saves and in-game files go to the directory answered by
+  `RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY`; the content path itself may be a
+  disposable copy in the app cache.
+- Load failures are reported with `RETRO_ENVIRONMENT_SET_MESSAGE` and the log,
+  never as a silent `false`.
+- Panics are caught at the C ABI boundary, so a bad frame cannot kill the host.
+- Save states carry a `BBKS` magic header plus a format version; states from
+  another version are rejected instead of being misread.
+- Cores are linked with 16 KB page alignment for Android 15 devices.
+
 ## Core Options
 
 BBKEmu on Android supports the same core options as the desktop libretro core. See [RetroArch Core](RetroArch-Core.md) for details.

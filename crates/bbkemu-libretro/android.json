@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "core": "bbkemu",
+  "so_name": "libbbkemu.so",
+  "system": "bbk",
+  "display_name": {
+    "en": "BBK Electronic Dictionary",
+    "zh": "步步高电子词典"
+  },
+  "short_name": "BBK",
+  "manufacturer": "BBK Electronics",
+  "supported_extensions": ["gam"],
+  "save_state_format": 1,
+  "firmware": [
+    {
+      "file": "8.BIN",
+      "required": true,
+      "hint": {
+        "en": "Font ROM from a BBK A4980 device. Keep the original name 8.BIN.",
+        "zh": "来自步步高 A4980 的字体 ROM，文件名必须保持为 8.BIN。"
+      }
+    },
+    {
+      "file": "E.BIN",
+      "required": true,
+      "hint": {
+        "en": "OS ROM from a BBK A4980 device. Keep the original name E.BIN.",
+        "zh": "来自步步高 A4980 的系统 ROM，文件名必须保持为 E.BIN。"
+      }
+    }
+  ],
+  "input": {
+    "preset": "dpad-abcd-select"
+  },
+  "video": {
+    "orientation": "landscape",
+    "pixel_format": "rgb565"
+  },
+  "notes": {
+    "en": "Runs .gam dictionary games on a 159x96 LCD. Requires 8.BIN and E.BIN firmware from a BBK A4980/A4988. A is Enter, B is Exit, Y is Help, X is the R key, Select is Insert and Start is Search.",
+    "zh": "运行 .gam 电子词典游戏，屏幕为 159x96。需要步步高 A4980/A4988 的 8.BIN 与 E.BIN 固件。A 为确认，B 为退出，Y 为帮助，X 为 R 键，Select 为插入，Start 为查找。"
+  }
+}
