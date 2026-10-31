@@ -193,21 +193,27 @@ struct RetroVariable {
     value: *const c_char,
 }
 
-/// Core options array for RetroArch
-static CORE_OPTIONS: &[&str] = &[
-    "bbkemu_lcd_color\0LCD Color Theme\0grey;green;blue;yellow;random\0",
-    "bbkemu_swap_lcd\0Swap LCD Width/Height (Restart)\0portrait;landscape\0",
-    concat!(
-        "bbkemu_cpu_rate\0CPU Clock Rate\0",
-        "0.25;0.50;0.75;1.00;1.50;2.00;3.00;4.00;8.00\0"
+/// Core options in the libretro `Label; choice1|choice2` format.
+static CORE_OPTIONS: &[(&str, &str)] = &[
+    (
+        "bbkemu_lcd_color",
+        "LCD Color Theme; grey|green|blue|yellow|random",
     ),
-    concat!(
-        "bbkemu_timer_rate\0Timer Clock Rate\0",
-        "0.25;0.50;0.75;1.00;1.50;2.00;3.00;4.00;8.00\0"
+    (
+        "bbkemu_swap_lcd",
+        "Swap LCD Width/Height (Restart); portrait|landscape",
     ),
-    concat!(
-        "bbkemu_key_repeat_interval\0Key Repeat Interval (ms)\0",
-        "0;50;100;150;200;250;300;400;500\0"
+    (
+        "bbkemu_cpu_rate",
+        "CPU Clock Rate; 0.25|0.50|0.75|1.00|1.50|2.00|3.00|4.00|8.00",
+    ),
+    (
+        "bbkemu_timer_rate",
+        "Timer Clock Rate; 0.25|0.50|0.75|1.00|1.50|2.00|3.00|4.00|8.00",
+    ),
+    (
+        "bbkemu_key_repeat_interval",
+        "Key Repeat Interval (ms); 0|50|100|150|200|250|300|400|500",
     ),
 ];
 
@@ -569,15 +575,31 @@ pub extern "C" fn retro_set_environment(cb: RetroEnvironmentT) {
                 &kbd as *const _ as *mut c_void,
             );
 
-            // Register core options
-            let options: Vec<*const c_char> = CORE_OPTIONS
+            // Register core options in the libretro `Label; choice1|choice2`
+            // format; the array must hold `retro_variable` pairs, not strings.
+            let keys: Vec<std::ffi::CString> = CORE_OPTIONS
                 .iter()
-                .map(|s| s.as_ptr() as *const c_char)
-                .chain(std::iter::once(std::ptr::null()))
+                .filter_map(|(key, _)| std::ffi::CString::new(*key).ok())
                 .collect();
+            let values: Vec<std::ffi::CString> = CORE_OPTIONS
+                .iter()
+                .filter_map(|(_, value)| std::ffi::CString::new(*value).ok())
+                .collect();
+            let mut variables: Vec<RetroVariable> = keys
+                .iter()
+                .zip(&values)
+                .map(|(key, value)| RetroVariable {
+                    key: key.as_ptr(),
+                    value: value.as_ptr(),
+                })
+                .collect();
+            variables.push(RetroVariable {
+                key: std::ptr::null(),
+                value: std::ptr::null(),
+            });
             env_cb(
                 RETRO_ENVIRONMENT_SET_VARIABLES,
-                options.as_ptr() as *mut c_void,
+                variables.as_mut_ptr() as *mut c_void,
             );
         }
     });
