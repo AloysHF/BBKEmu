@@ -218,6 +218,21 @@ fn load_roms_for_model(emu: &mut Emulator, model: &BbkModel, content_path: Optio
     }
 }
 
+/// Read the bytes of the content being loaded.
+///
+/// The core advertises `need_fullpath = true`, so conforming frontends hand
+/// over a real file path instead of a memory buffer. Embedded frontends may
+/// still pass an in-memory copy, so it is used as a fallback.
+fn read_content(path: Option<&Path>, data: *const u8, size: usize) -> Option<Vec<u8>> {
+    if let Some(path) = path {
+        return std::fs::read(path).ok();
+    }
+    if data.is_null() || size == 0 {
+        return None;
+    }
+    Some(unsafe { std::slice::from_raw_parts(data, size) }.to_vec())
+}
+
 /// Helper function to get a core option value
 unsafe fn get_variable_value(cb: RetroEnvironmentT, key: &str) -> Option<String> {
     let cb = cb?;
@@ -426,7 +441,7 @@ pub unsafe extern "C" fn retro_get_system_info(info: *mut RetroSystemInfo) {
     (*info).library_name = c"BBKEmu".as_ptr();
     (*info).library_version = c"0.1.0".as_ptr();
     (*info).valid_extensions = c"gam".as_ptr();
-    (*info).need_fullpath = false;
+    (*info).need_fullpath = true;
     (*info).block_extract = false;
 }
 
@@ -471,12 +486,6 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
         if info.is_null() {
             return false;
         }
-        let data = (*info).data as *const u8;
-        let size = (*info).size;
-        if data.is_null() || size == 0 {
-            return false;
-        }
-        let game_data = std::slice::from_raw_parts(data, size);
         let content_path = if (*info).path.is_null() {
             None
         } else {
@@ -484,6 +493,13 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
                 .to_str()
                 .ok()
                 .map(PathBuf::from)
+        };
+        let Some(game_data) = read_content(
+            content_path.as_deref(),
+            (*info).data as *const u8,
+            (*info).size,
+        ) else {
+            return false;
         };
 
         if let Some(ref mut emu) = EMULATOR {
@@ -593,7 +609,7 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
                 );
             }
 
-            let result = emu.load_gam(game_data);
+            let result = emu.load_gam(&game_data);
             if result.is_ok() {
                 // Apply model-specific joypad remapping after game is loaded
                 apply_joypad_remapping_for_model(emu.model());
