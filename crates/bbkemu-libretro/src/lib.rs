@@ -12,6 +12,7 @@ use bbkemu_core::{model, BbkModel, Emulator};
 // libretro constants
 const RETRO_API_VERSION: u32 = 1;
 const RETRO_REGION_NTSC: u32 = 0;
+const RETRO_ENVIRONMENT_SET_MESSAGE: u32 = 6;
 const RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY: u32 = 9;
 const RETRO_ENVIRONMENT_SET_PIXEL_FORMAT: u32 = 10;
 const RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS: u32 = 11;
@@ -19,7 +20,13 @@ const RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK: u32 = 12;
 const RETRO_ENVIRONMENT_SET_VARIABLES: u32 = 16;
 const RETRO_ENVIRONMENT_GET_VARIABLE: u32 = 17;
 const RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: u32 = 18;
+const RETRO_ENVIRONMENT_GET_LOG_INTERFACE: u32 = 27;
 const RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY: u32 = 31;
+
+// libretro log levels
+const RETRO_LOG_INFO: u32 = 1;
+const RETRO_LOG_WARN: u32 = 2;
+const RETRO_LOG_ERROR: u32 = 3;
 
 // libretro pixel formats
 const RETRO_PIXEL_FORMAT_RGB565: u32 = 2;
@@ -77,6 +84,8 @@ type RetroInputStateT =
     Option<unsafe extern "C" fn(port: u32, device: u32, index: u32, id: u32) -> i16>;
 type RetroKeyboardCallbackT =
     Option<unsafe extern "C" fn(down: bool, keycode: u32, character: u32, key_modifiers: u16)>;
+type RetroLogPrintfT =
+    Option<unsafe extern "C" fn(level: u32, fmt: *const c_char, ...) -> std::os::raw::c_int>;
 
 // libretro structs
 #[repr(C)]
@@ -135,6 +144,9 @@ static mut AUDIO_CB: RetroAudioSampleT = None;
 /// Audio batch callback for sending sample buffers to frontend
 static mut AUDIO_BATCH_CB: RetroAudioSampleBatchT = None;
 
+/// Frontend logging callback, queried from the frontend's environment
+static mut LOG_CB: RetroLogPrintfT = None;
+
 /// Input poll callback
 static mut INPUT_POLL_CB: RetroInputPollT = None;
 
@@ -158,6 +170,20 @@ const BATTERY_SAVE_LEN: usize = 0x8000;
 #[repr(C)]
 struct RetroKeyboardCallback {
     callback: RetroKeyboardCallbackT,
+}
+
+/// On-screen message shown by the frontend (RETRO_ENVIRONMENT_SET_MESSAGE).
+#[repr(C)]
+struct RetroMessage {
+    msg: *const c_char,
+    /// Duration in frames.
+    frames: u32,
+}
+
+/// Frontend logging callback (RETRO_ENVIRONMENT_GET_LOG_INTERFACE).
+#[repr(C)]
+struct RetroLogCallback {
+    log: RetroLogPrintfT,
 }
 
 /// Core option definition for RetroArch
@@ -200,6 +226,54 @@ fn get_system_directory() -> Option<PathBuf> {
         }
         None
     }
+}
+
+/// Mirror a message to the frontend's log interface and the `log` crate.
+fn log_message(level: u32, message: &str) {
+    match level {
+        RETRO_LOG_ERROR => log::error!("{message}"),
+        RETRO_LOG_WARN => log::warn!("{message}"),
+        _ => log::info!("{message}"),
+    }
+    // Frontends always answer the log interface with the printf-style callback
+    // (`%s` avoids interpreting percent signs in game names or paths).
+    unsafe {
+        if let Some(log_cb) = LOG_CB {
+            if let Ok(c_message) = std::ffi::CString::new(message) {
+                log_cb(level, c"%s".as_ptr(), c_message.as_ptr());
+            }
+        }
+    }
+}
+
+/// Ask the frontend to show a short on-screen message.
+///
+/// Frontends without an on-screen message facility (headless test harnesses)
+/// simply return false; the message is already mirrored to the log by callers.
+fn show_message(message: &str, frames: u32) {
+    unsafe {
+        let Some(env_cb) = ENVIRONMENT_CB else {
+            return;
+        };
+        let Ok(c_message) = std::ffi::CString::new(message) else {
+            return;
+        };
+        let msg = RetroMessage {
+            msg: c_message.as_ptr(),
+            frames,
+        };
+        env_cb(
+            RETRO_ENVIRONMENT_SET_MESSAGE,
+            &msg as *const _ as *mut c_void,
+        );
+    }
+}
+
+/// Report a load failure to both the log and the frontend's on-screen message.
+fn fail(message: &str) -> bool {
+    log_message(RETRO_LOG_ERROR, message);
+    show_message(message, 240);
+    false
 }
 
 /// Get the save directory from the frontend.
@@ -270,15 +344,23 @@ fn persist_battery_save() {
     }
 }
 
-/// Try to load ROM files for the given model.
+/// Try to load the firmware ROMs for the given model.
 ///
-/// Desktop frontends install the firmware under `<system>/BBKEmu/<model>/`.
+/// Desktop frontends install the firmware under `<system>/BBKEmu/<model>/`;
+/// the Android frontend imports firmware files flat into `<system>/`.
 /// EmulatorJS cannot write to that directory: it extracts an `EJS_biosUrl`
 /// archive beside the content file instead, so on Emscripten also look there.
-fn load_roms_for_model(emu: &mut Emulator, model: &BbkModel, content_path: Option<&Path>) {
+///
+/// Returns the names of the firmware files that could not be found.
+fn load_roms_for_model(
+    emu: &mut Emulator,
+    model: &BbkModel,
+    content_path: Option<&Path>,
+) -> Vec<&'static str> {
     let mut model_dirs = Vec::new();
     if let Some(system_dir) = get_system_directory() {
         model_dirs.push(system_dir.join("BBKEmu").join(model.name));
+        model_dirs.push(system_dir);
     }
 
     #[cfg(target_os = "emscripten")]
@@ -297,11 +379,27 @@ fn load_roms_for_model(emu: &mut Emulator, model: &BbkModel, content_path: Optio
             .find_map(|path| std::fs::read(path).ok())
     };
 
-    if let Some(data) = find_rom(&["8.BIN", "8.bin"]) {
-        emu.load_rom_8(&data);
+    let mut missing = Vec::new();
+    match find_rom(&["8.BIN", "8.bin"]) {
+        Some(data) => emu.load_rom_8(&data),
+        None => missing.push("8.BIN"),
     }
-    if let Some(data) = find_rom(&["E.BIN", "E.bin", "e.bin"]) {
-        emu.load_rom_e(&data);
+    match find_rom(&["E.BIN", "E.bin", "e.bin"]) {
+        Some(data) => emu.load_rom_e(&data),
+        None => missing.push("E.BIN"),
+    }
+    missing
+}
+
+/// Directory the core searches first for firmware, for error messages.
+fn firmware_location() -> String {
+    match get_system_directory() {
+        Some(dir) => dir
+            .join("BBKEmu")
+            .join(model::MODEL_4980.name)
+            .display()
+            .to_string(),
+        None => "<system>/BBKEmu/A4980".to_owned(),
     }
 }
 
@@ -310,14 +408,17 @@ fn load_roms_for_model(emu: &mut Emulator, model: &BbkModel, content_path: Optio
 /// The core advertises `need_fullpath = true`, so conforming frontends hand
 /// over a real file path instead of a memory buffer. Embedded frontends may
 /// still pass an in-memory copy, so it is used as a fallback.
-fn read_content(path: Option<&Path>, data: *const u8, size: usize) -> Option<Vec<u8>> {
+fn read_content(path: Option<&Path>, data: *const u8, size: usize) -> Result<Vec<u8>, String> {
     if let Some(path) = path {
-        return std::fs::read(path).ok();
+        return std::fs::read(path)
+            .map_err(|error| format!("BBKEmu: cannot read {}.\n{error}", path.display()));
     }
     if data.is_null() || size == 0 {
-        return None;
+        return Err(
+            "BBKEmu: the frontend passed neither a content path nor content data.".to_owned(),
+        );
     }
-    Some(unsafe { std::slice::from_raw_parts(data, size) }.to_vec())
+    Ok(unsafe { std::slice::from_raw_parts(data, size) }.to_vec())
 }
 
 /// Helper function to get a core option value
@@ -433,6 +534,16 @@ pub extern "C" fn retro_set_environment(cb: RetroEnvironmentT) {
             callback: Some(keyboard_callback),
         };
         if let Some(env_cb) = cb {
+            // Query the log interface first so later failures reach the
+            // frontend's log as well as the on-screen message.
+            let mut log = RetroLogCallback { log: None };
+            if env_cb(
+                RETRO_ENVIRONMENT_GET_LOG_INTERFACE,
+                &mut log as *mut _ as *mut c_void,
+            ) {
+                LOG_CB = log.log;
+            }
+
             env_cb(
                 RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK,
                 &kbd as *const _ as *mut c_void,
@@ -573,22 +684,25 @@ struct RetroInputDescriptor {
 pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
     let result = panic::catch_unwind(|| {
         if info.is_null() {
-            return false;
+            return fail("BBKEmu: the frontend passed no content information.");
         }
         let content_path = if (*info).path.is_null() {
             None
         } else {
-            CStr::from_ptr((*info).path)
-                .to_str()
-                .ok()
-                .map(PathBuf::from)
+            match CStr::from_ptr((*info).path).to_str() {
+                Ok(path) => Some(PathBuf::from(path)),
+                Err(_) => {
+                    return fail("BBKEmu: the content path is not valid UTF-8.");
+                }
+            }
         };
-        let Some(game_data) = read_content(
+        let game_data = match read_content(
             content_path.as_deref(),
             (*info).data as *const u8,
             (*info).size,
-        ) else {
-            return false;
+        ) {
+            Ok(data) => data,
+            Err(message) => return fail(&message),
         };
 
         // Frames are emitted as u16 RGB565 samples; the frontend has to know
@@ -602,138 +716,151 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
             None => false,
         };
         if !declared {
-            return false;
+            return fail("BBKEmu: this frontend does not support RGB565 video.");
         }
 
-        if let Some(ref mut emu) = EMULATOR {
-            // Load ROMs before loading the game
-            let bbk_model = &model::MODEL_4980;
-            load_roms_for_model(emu, bbk_model, content_path.as_deref());
+        let Some(ref mut emu) = EMULATOR else {
+            return fail("BBKEmu: the core was not initialized by the frontend.");
+        };
 
-            // Set input descriptors
-            let inputs = [
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_B,
-                    description: c"EXIT".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_Y,
-                    description: c"HELP".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_SELECT,
-                    description: c"INSERT".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_START,
-                    description: c"SEARCH".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_UP,
-                    description: c"UP".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_DOWN,
-                    description: c"DOWN".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_LEFT,
-                    description: c"LEFT".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_RIGHT,
-                    description: c"RIGHT".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_A,
-                    description: c"ENTER".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_X,
-                    description: c"R".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_L,
-                    description: c"PGUP".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: RETRO_DEVICE_JOYPAD,
-                    index: 0,
-                    id: RETRO_DEVICE_ID_JOYPAD_R,
-                    description: c"PGDN".as_ptr(),
-                },
-                RetroInputDescriptor {
-                    port: 0,
-                    device: 0,
-                    index: 0,
-                    id: 0,
-                    description: std::ptr::null(),
-                },
-            ];
+        // Load the firmware ROMs before loading the game.
+        let bbk_model = &model::MODEL_4980;
+        let missing = load_roms_for_model(emu, bbk_model, content_path.as_deref());
+        if !missing.is_empty() {
+            return fail(&format!(
+                "BBKEmu: missing firmware: {}.\nCopy 8.BIN and E.BIN into {}.",
+                missing.join(", "),
+                firmware_location()
+            ));
+        }
 
-            if let Some(env_cb) = ENVIRONMENT_CB {
-                env_cb(
-                    RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS,
-                    inputs.as_ptr() as *mut c_void,
-                );
-            }
+        // Set input descriptors
+        let inputs = [
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_B,
+                description: c"EXIT".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_Y,
+                description: c"HELP".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_SELECT,
+                description: c"INSERT".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_START,
+                description: c"SEARCH".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_UP,
+                description: c"UP".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_DOWN,
+                description: c"DOWN".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_LEFT,
+                description: c"LEFT".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_RIGHT,
+                description: c"RIGHT".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_A,
+                description: c"ENTER".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_X,
+                description: c"R".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_L,
+                description: c"PGUP".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: RETRO_DEVICE_JOYPAD,
+                index: 0,
+                id: RETRO_DEVICE_ID_JOYPAD_R,
+                description: c"PGDN".as_ptr(),
+            },
+            RetroInputDescriptor {
+                port: 0,
+                device: 0,
+                index: 0,
+                id: 0,
+                description: std::ptr::null(),
+            },
+        ];
 
-            let result = emu.load_gam(&game_data);
-            if result.is_ok() {
+        if let Some(env_cb) = ENVIRONMENT_CB {
+            env_cb(
+                RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS,
+                inputs.as_ptr() as *mut c_void,
+            );
+        }
+
+        match emu.load_gam(&game_data) {
+            Ok(()) => {
                 // Apply model-specific joypad remapping after game is loaded
                 apply_joypad_remapping_for_model(emu.model());
+                log_message(RETRO_LOG_INFO, "BBKEmu: game loaded");
                 // Content may live in a throwaway location (a browser MEMFS
-                // tree or an Android app cache copy of a SAF document), so keep
-                // battery saves in the frontend's persistent save directory.
+                // tree or an Android app cache copy of a SAF document), so
+                // keep battery saves in the frontend's persistent save
+                // directory.
                 if let Some(path) = battery_save_path(content_path.as_deref()) {
                     restore_battery_save(emu, &path);
                     BATTERY_SAVE_PATH = Some(path);
                 }
+                true
             }
-            result.is_ok()
-        } else {
-            false
+            Err(error) => fail(&format!(
+                "BBKEmu: failed to load this game.\n{error}\n\nSupported content: .gam"
+            )),
         }
     });
 
     match result {
         Ok(val) => val,
         Err(_) => {
-            eprintln!("BBKEmu: panic during retro_load_game");
+            log_message(RETRO_LOG_ERROR, "BBKEmu: panic during retro_load_game");
             false
         }
     }
