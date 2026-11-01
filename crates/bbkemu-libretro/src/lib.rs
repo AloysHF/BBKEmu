@@ -275,6 +275,10 @@ fn show_message(message: &str, frames: u32) {
     }
 }
 
+/// The error reported when the frontend supplies no content path.
+const MISSING_CONTENT_PATH: &str =
+    "The frontend passed no content path; this core loads content from a file path only.";
+
 /// Report a load failure to both the log and the frontend's on-screen message.
 fn fail(message: &str) -> bool {
     log_message(RETRO_LOG_ERROR, message);
@@ -434,20 +438,13 @@ fn firmware_location() -> String {
 
 /// Read the bytes of the content being loaded.
 ///
-/// The core advertises `need_fullpath = true`, so conforming frontends hand
-/// over a real file path instead of a memory buffer. Embedded frontends may
-/// still pass an in-memory copy, so it is used as a fallback.
-fn read_content(path: Option<&Path>, data: *const u8, size: usize) -> Result<Vec<u8>, String> {
-    if let Some(path) = path {
-        return std::fs::read(path)
-            .map_err(|error| format!("BBKEmu: cannot read {}.\n{error}", path.display()));
-    }
-    if data.is_null() || size == 0 {
-        return Err(
-            "BBKEmu: the frontend passed neither a content path nor content data.".to_owned(),
-        );
-    }
-    Ok(unsafe { std::slice::from_raw_parts(data, size) }.to_vec())
+/// The core advertises `need_fullpath = true`, so the frontend always hands
+/// over a real file path. A memory buffer is ignored.
+fn read_content(path: Option<&Path>) -> Result<Vec<u8>, String> {
+    let Some(path) = path else {
+        return Err(MISSING_CONTENT_PATH.to_owned());
+    };
+    std::fs::read(path).map_err(|error| format!("BBKEmu: cannot read {}.\n{error}", path.display()))
 }
 
 /// Helper function to get a core option value
@@ -725,29 +722,21 @@ struct RetroInputDescriptor {
 
 /// # Safety
 ///
-/// `info` must be a valid pointer to a `RetroGameInfo` struct.
-/// `(*info).data` must be a valid pointer to `(*info).size` bytes of game data.
+/// `info` must be a valid pointer to a `RetroGameInfo` struct whose `path` is
+/// either null or a valid NUL-terminated string.
 #[no_mangle]
 pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
     guard(false, || {
-        if info.is_null() {
-            return fail("BBKEmu: the frontend passed no content information.");
+        if info.is_null() || (*info).path.is_null() {
+            return fail(MISSING_CONTENT_PATH);
         }
-        let content_path = if (*info).path.is_null() {
-            None
-        } else {
-            match CStr::from_ptr((*info).path).to_str() {
-                Ok(path) => Some(PathBuf::from(path)),
-                Err(_) => {
-                    return fail("BBKEmu: the content path is not valid UTF-8.");
-                }
+        let content_path = match CStr::from_ptr((*info).path).to_str() {
+            Ok(path) => Some(PathBuf::from(path)),
+            Err(_) => {
+                return fail("BBKEmu: the content path is not valid UTF-8.");
             }
         };
-        let game_data = match read_content(
-            content_path.as_deref(),
-            (*info).data as *const u8,
-            (*info).size,
-        ) {
+        let game_data = match read_content(content_path.as_deref()) {
             Ok(data) => data,
             Err(message) => return fail(&message),
         };

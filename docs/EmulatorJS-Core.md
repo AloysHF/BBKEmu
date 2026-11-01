@@ -101,8 +101,8 @@ files are never uploaded; the browser reads them locally.
 ### Content
 
 A bare `.gam` file loads on its own. If a game needs companion files, zip it
-with them so the frontend sees a single file. The core receives the game data
-in memory, so no path handling is needed.
+with them so the frontend sees a single file. The core reads the file from the
+wasm filesystem path the frontend supplies.
 
 ## Build locally
 
