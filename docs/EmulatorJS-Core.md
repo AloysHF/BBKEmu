@@ -78,7 +78,7 @@ release (≥ 4.2.3) and keep this `cores/` directory.
     // Replace the BIOS step: see "Firmware" below.
     var emulator = window.EJS_emulator;
     emulator.downloadBios = function () {
-      return writeFirmwareAtArchivePaths(emulator, firmwareZip);
+      return readFirmware(emulator, firmwareZip);
     };
   };
 </script>
@@ -86,7 +86,7 @@ release (≥ 4.2.3) and keep this `cores/` directory.
 ```
 
 `site/play.html` in this repository is a complete example, including the
-`writeFirmwareAtArchivePaths` helper.
+`readFirmware` and `writeFirmwareEntry` helpers.
 
 ### Firmware
 
