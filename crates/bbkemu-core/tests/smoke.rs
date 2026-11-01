@@ -8,8 +8,9 @@
 //! cargo test -p bbkemu-core --test smoke -- --ignored --nocapture
 //! ```
 //!
-//! By default it looks for games in `<repo>/tmp/games` and ROMs in `<repo>/tmp/roms`.
-//! Override the locations with the `BBK_GAME_DIR` and `BBK_ROM_DIR` environment variables.
+//! By default it looks for games in `<repo>/tmp/games` and ROMs in
+//! `<repo>/tmp/roms/bbkemu/a4980`. Override the locations with the `BBK_GAME_DIR`
+//! and `BBK_ROM_DIR` environment variables.
 
 use std::path::{Path, PathBuf};
 
@@ -35,7 +36,7 @@ fn game_dir() -> Option<PathBuf> {
 }
 
 /// Resolve the directory that holds the ROM files (8.BIN, E.BIN).
-/// Searches in order: BBK_ROM_DIR env var, then tmp/roms/4980, then tmp/roms.
+/// Defaults to tmp/roms/bbkemu/a4980; override with BBK_ROM_DIR.
 fn rom_dir() -> Option<PathBuf> {
     if let Ok(dir) = std::env::var("BBK_ROM_DIR") {
         let p = PathBuf::from(dir);
@@ -43,20 +44,8 @@ fn rom_dir() -> Option<PathBuf> {
     }
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let root = manifest.parent().and_then(|p| p.parent())?;
-
-    // Try tmp/roms/4980 first (model-specific directory)
-    let candidate_4980 = root.join("tmp").join("roms").join("4980");
-    if candidate_4980.is_dir() {
-        return Some(candidate_4980);
-    }
-
-    // Fall back to tmp/roms
-    let candidate = root.join("tmp").join("roms");
-    if candidate.is_dir() {
-        Some(candidate)
-    } else {
-        None
-    }
+    let candidate = root.join("tmp").join("roms").join("bbkemu").join("a4980");
+    candidate.is_dir().then_some(candidate)
 }
 
 /// Collect all .gam files in a directory (non-recursive).

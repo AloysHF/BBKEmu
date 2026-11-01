@@ -124,7 +124,7 @@ Smoke tests verify that all games load and run without panicking. These tests re
 
 **Prerequisites:**
 - Game files (`.gam`) in `tmp/games/`
-- ROM files (`8.BIN`, `E.BIN`) in `tmp/roms/4980/`
+- ROM files (`8.BIN`, `E.BIN`) in `tmp/roms/bbkemu/a4980/`
 
 **Run smoke tests:**
 
@@ -138,7 +138,7 @@ cargo test -p bbkemu-core --test smoke smoke_screenshot_all_games -- --ignored -
 
 **Environment variables:**
 - `BBK_GAME_DIR` — override game directory (default: `tmp/games`)
-- `BBK_ROM_DIR` — override ROM directory (default: `tmp/roms/4980`)
+- `BBK_ROM_DIR` — override ROM directory (default: `tmp/roms/bbkemu/a4980`)
 
 **Output:**
 - Screenshots are saved to `tmp/smoke_screenshots/` (or `tmp/smoke_screenshots_extended/` for extended test)
