@@ -192,9 +192,19 @@ data/
 <script src="data/loader.js"></script>
 ```
 
-The firmware archive must be a ZIP containing `8.BIN` (font ROM) and `E.BIN`
-(OS ROM) at its root. EmulatorJS extracts it next to the content file, which is
-where the core looks for the firmware in the browser.
+The firmware archive must be a ZIP that keeps the system layout, so the model
+folder survives extraction:
+
+```
+bbk-firmware.zip
+  bbkemu/
+    a4980/        # or a4988
+      8.BIN
+      E.BIN
+```
+
+EmulatorJS extracts it into the wasm filesystem root, which is where the core
+looks for firmware in the browser. The folder name selects the model.
 
 Games are bare `.gam` files. If a game loads companion files, zip it with them
 so the frontend sees a single file; keep the original directory layout inside

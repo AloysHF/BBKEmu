@@ -62,6 +62,10 @@ virtual-controller preset, firmware requirements and orientation.
 
 Rules the core follows for any Android host:
 
+- Firmware is read from `RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY` as
+  `bbkemu/<model>/` (`a4980` or `a4988`) with the exact case-sensitive names
+  `8.BIN` and `E.BIN`. RetroDroid fills that folder from its user-visible
+  `BIOS/bbk/<model>/` tree; no other location is searched.
 - Saves and in-game files go to the directory answered by
   `RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY`; the content path itself may be a
   disposable copy in the app cache.
@@ -87,6 +91,7 @@ BBKEmu on Android supports the same core options as the desktop libretro core. S
 ### Games do not load
 
 - Ensure ROM files (`8.BIN`, `E.BIN`) are placed in the model directory the
-  profile asks for (`system/BBKEmu/A4980/` for the supported A4980 model)
+  frontend uses (`system/bbkemu/a4980/` for the default A4980 model,
+  `system/bbkemu/a4988/` for A4988)
 - Check that the game file is a valid `.gam` format
 - Enable debug logging via core options to see detailed error messages

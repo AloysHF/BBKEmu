@@ -84,19 +84,21 @@ release (≥ 4.2.3) and keep this `cores/` directory.
 ### Firmware
 
 BBKEmu needs the font ROM (`8.BIN`) and OS ROM (`E.BIN`) dumped from a physical
-BBK dictionary. Desktop frontends read them from
-`<system>/BBKEmu/A4980/`, but a browser page cannot write to a RetroArch system
-directory. Set `EJS_biosUrl` to a ZIP that contains both files at its root:
+BBK dictionary. Every frontend reads them from the same fixed layout below its
+system directory; in the browser that root is the EmulatorJS wasm filesystem
+root. Set `EJS_biosUrl` to a ZIP that preserves the layout:
 
 ```
 bbk-firmware.zip
-├── 8.BIN
-└── E.BIN
+└── bbkemu/
+    └── a4980/            # or a4988
+        ├── 8.BIN
+        └── E.BIN
 ```
 
-EmulatorJS extracts the archive beside the content file inside the wasm file
-system, which is where the core looks for the firmware on Emscripten. The
-files are never uploaded; the browser reads them locally.
+EmulatorJS extracts the archive into the wasm filesystem root, which is where
+the core looks for the firmware on Emscripten. The folder name selects the
+model. Files are never uploaded; the browser reads them locally.
 
 ### Content
 

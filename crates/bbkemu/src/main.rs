@@ -28,13 +28,9 @@ struct Cli {
     /// GAM file to load
     game: PathBuf,
 
-    /// Font ROM file (8.BIN) - optional
-    #[arg(short = '8', long)]
-    rom8: Option<PathBuf>,
-
-    /// OS ROM file (E.BIN) - optional, for LLE mode
-    #[arg(short = 'e', long)]
-    rome: Option<PathBuf>,
+    /// System directory that holds bbkemu/<model>/
+    #[arg(long, value_name = "DIR", default_value = "system")]
+    system_dir: PathBuf,
 
     /// Display scale factor
     #[arg(short, long, default_value = "4", value_parser = clap::value_parser!(u32).range(1..=16))]
@@ -44,8 +40,8 @@ struct Cli {
     #[arg(short, long)]
     fullscreen: bool,
 
-    /// BBK model (4980, 4988)
-    #[arg(short, long, default_value = "4980")]
+    /// BBK model: a4980 or a4988
+    #[arg(short, long, default_value = "a4980")]
     model: String,
 
     /// Enable debug logging
@@ -107,14 +103,8 @@ fn main() -> Result<()> {
     log::info!("BBKEmu starting...");
 
     // Select model
-    let bbk_model: &'static BbkModel = match cli.model.as_str() {
-        "4980" => &model::MODEL_4980,
-        "4988" => &model::MODEL_4988,
-        _ => {
-            log::warn!("Unknown model '{}', using A4980", cli.model);
-            &model::MODEL_4980
-        }
-    };
+    let bbk_model: &'static BbkModel = model::from_id(&cli.model)
+        .ok_or_else(|| anyhow::anyhow!("unknown model '{}': expected a4980 or a4988", cli.model))?;
 
     log::info!("Creating emulator...");
     let mut emu = Emulator::new(bbk_model);
@@ -143,31 +133,11 @@ fn main() -> Result<()> {
 
     log::info!("Emulator created");
 
-    // Load optional ROMs
-    let model_name = bbk_model.name;
-    if let Some(path) = &cli.rom8 {
-        let data = fs::read(path)?;
-        emu.load_rom_8(&data);
-    } else {
-        // Try to load font ROM from model-specific directory
-        let path = format!("system/BBKEmu/{}/8.BIN", model_name);
-        if let Ok(data) = fs::read(&path) {
-            log::info!("Loading font ROM from {}", path);
-            emu.load_rom_8(&data);
-        }
-    }
-    // Always load OS ROM - needed for D2F6 dispatch and proper initialization
-    if let Some(path) = &cli.rome {
-        let data = fs::read(path)?;
-        emu.load_rom_e(&data);
-    } else {
-        // Try to load OS ROM from model-specific directory
-        let path = format!("system/BBKEmu/{}/E.BIN", model_name);
-        if let Ok(data) = fs::read(&path) {
-            log::info!("Loading OS ROM from {}", path);
-            emu.load_rom_e(&data);
-        }
-    }
+    // Load the firmware from the fixed per-model directory.
+    let firmware = bbkemu_core::firmware::load(&cli.system_dir, bbk_model)
+        .map_err(|error| anyhow::anyhow!("{}: {error}", bbk_model.name))?;
+    emu.load_rom_8(&firmware.font);
+    emu.load_rom_e(&firmware.os);
 
     // Load game
     let game_data = fs::read(&cli.game)?;
