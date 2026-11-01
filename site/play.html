@@ -234,6 +234,11 @@
         <h2 data-i18n="error-title">无法启动在线模拟器</h2>
         <p data-i18n="error-text">EmulatorJS 运行时未部署（缺少 <code>data/loader.js</code>）。请通过 Pages 部署流程生成 <code>site/data</code>，或直接使用独立版模拟器。</p>
       </div>
+
+      <div id="play-firmware-error" class="play-overlay" hidden>
+        <h2 data-i18n="firmware-error-title">无法读取固件 ZIP</h2>
+        <p data-i18n="firmware-error-text">固件 ZIP 解压失败。请确认文件完整，并包含 <code>bbkemu/a4980/8.BIN</code> 与 <code>bbkemu/a4980/E.BIN</code>（A4988 为 <code>bbkemu/a4988/</code>）。</p>
+      </div>
     </div>
 
     <div class="play-controls">
@@ -276,6 +281,8 @@
           'reset': '换一个游戏',
           'note': '在线试玩使用 <a href="https://emulatorjs.org" target="_blank" rel="noopener">EmulatorJS</a>，即时存档只保存在浏览器本地。固件与游戏数据不随本站分发，请使用自己合法持有的转储文件。想离线游玩？从 <a href="https://github.com/AloysHF/BBKEmu/releases" target="_blank" rel="noopener">Releases</a> 下载独立模拟器或 RetroArch 核心。',
           'invalid-firmware': '固件必须是包含 bbkemu/a4980/ 或 bbkemu/a4988/ 目录的 .zip 文件。',
+          'firmware-error-title': '无法读取固件 ZIP',
+          'firmware-error-text': '固件 ZIP 解压失败。请确认文件完整，并包含 <code>bbkemu/a4980/8.BIN</code> 与 <code>bbkemu/a4980/E.BIN</code>（A4988 为 <code>bbkemu/a4988/</code>）。',
           'invalid-game': '仅支持 .gam 游戏文件或包含 .gam 的 .zip 文件。'
         },
         en: {
@@ -301,6 +308,8 @@
           'reset': 'Play another game',
           'note': 'Online play uses <a href="https://emulatorjs.org" target="_blank" rel="noopener">EmulatorJS</a>; save states stay in your browser only. Firmware and game data are not distributed with this site, so use your own legally dumped files. Prefer playing offline? Download the standalone emulator or the RetroArch core from <a href="https://github.com/AloysHF/BBKEmu/releases" target="_blank" rel="noopener">Releases</a>.',
           'invalid-firmware': 'The firmware must be a .zip containing a bbkemu/a4980/ or bbkemu/a4988/ directory.',
+          'firmware-error-title': 'Unable to read the firmware ZIP',
+          'firmware-error-text': 'The firmware ZIP could not be unpacked. Make sure the file is intact and contains <code>bbkemu/a4980/8.BIN</code> and <code>bbkemu/a4980/E.BIN</code> (or <code>bbkemu/a4988/</code> for A4988).',
           'invalid-game': 'Only .gam game files or .zip archives containing a .gam are supported.'
         }
       };
@@ -346,6 +355,7 @@
       var picker = document.getElementById('play-picker');
       var pickerError = document.getElementById('play-picker-error');
       var error = document.getElementById('play-error');
+      var firmwareError = document.getElementById('play-firmware-error');
       var firmwareInput = document.getElementById('firmware-file');
       var gameInput = document.getElementById('game-file');
       var firmwareName = document.getElementById('firmware-name');
@@ -363,12 +373,67 @@
         show(pickerError);
       }
 
+      // EmulatorJS 4.2.x writes every BIOS archive entry to the content
+      // directory as a bare file name, which loses the bbkemu/<model>/ folders
+      // the core looks for. Replace the BIOS step so each entry lands at its
+      // archive path. The hook runs on the "ready" event, before the start
+      // button can be pressed.
+      function installFirmwareLoader(file) {
+        window.EJS_ready = function () {
+          var emulator = window.EJS_emulator;
+          emulator.downloadBios = function () {
+            return readFirmware(emulator, file).catch(function (reason) {
+              console.error(reason);
+              show(firmwareError);
+            });
+          };
+        };
+      }
+
+      function readFirmware(emulator, file) {
+        var label = emulator.localization('Decompress Game BIOS');
+        return file.arrayBuffer().then(function (buffer) {
+          var compression = new window.EJS_COMPRESSION(emulator);
+          emulator.textElem.innerText = label;
+          return compression.decompress(new Uint8Array(buffer), function (text, progress) {
+            if (progress) emulator.textElem.innerText = label + text;
+          });
+        }).then(function (entries) {
+          if (!entries || entries['!!notCompressedData']) {
+            throw new Error('firmware archive is not a readable ZIP');
+          }
+          var fs = emulator.gameManager.FS;
+          Object.keys(entries).forEach(function (entry) {
+            writeFirmwareEntry(fs, entry, entries[entry]);
+          });
+        });
+      }
+
+      function writeFirmwareEntry(fs, entry, data) {
+        if (entry.charAt(entry.length - 1) === '/') return;
+        var segments = entry.split('/');
+        if (segments.some(function (segment) {
+          return segment === '' || segment === '.' || segment === '..';
+        })) return;
+        var directory = '';
+        for (var i = 0; i < segments.length - 1; i += 1) {
+          directory += '/' + segments[i];
+          try {
+            fs.mkdir(directory);
+          } catch (error) {
+            // mkdir throws when the directory already exists.
+          }
+        }
+        fs.writeFile('/' + entry, new Uint8Array(data));
+      }
+
       function maybeBoot() {
         if (!(firmwareFile && gameFile)) return;
         if (booted) return;
         booted = true;
         hide(picker);
         hide(error);
+        hide(firmwareError);
         hide(pickerError);
         show(status);
 
@@ -378,13 +443,11 @@
         // EmulatorJS uses it to recognize the game archive entry.
         window.EJS_gameUrl = URL.createObjectURL(gameFile);
         window.EJS_gameName = gameFile.name;
-        // EmulatorJS decompresses the firmware archive into the wasm
-        // filesystem root, where the core looks for the keep-layout entries.
-        window.EJS_biosUrl = URL.createObjectURL(firmwareFile);
         window.EJS_pathtodata = RUNTIME_PATH;
         window.EJS_startOnLoaded = false;
         window.EJS_backgroundColor = '#0A0A0A';
         if (currentLang === 'zh') window.EJS_language = 'zh-CN';
+        installFirmwareLoader(firmwareFile);
 
         var runtime = document.createElement('script');
         runtime.src = RUNTIME_PATH + 'loader.js';

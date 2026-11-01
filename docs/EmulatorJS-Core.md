@@ -72,21 +72,28 @@ release (≥ 4.2.3) and keep this `cores/` directory.
   EJS_core = "bbkemu";
   EJS_gameUrl = URL.createObjectURL(gameFile);
   EJS_gameName = gameFile.name;
-  EJS_biosUrl = URL.createObjectURL(firmwareZip);
   EJS_pathtodata = "data/";
   EJS_startOnLoaded = false;
+  EJS_ready = function () {
+    // Replace the BIOS step: see "Firmware" below.
+    var emulator = window.EJS_emulator;
+    emulator.downloadBios = function () {
+      return writeFirmwareAtArchivePaths(emulator, firmwareZip);
+    };
+  };
 </script>
 <script src="data/loader.js"></script>
 ```
 
-`site/play.html` in this repository is a complete example.
+`site/play.html` in this repository is a complete example, including the
+`writeFirmwareAtArchivePaths` helper.
 
 ### Firmware
 
 BBKEmu needs the font ROM (`8.BIN`) and OS ROM (`E.BIN`) dumped from a physical
 BBK dictionary. Every frontend reads them from the same fixed layout below its
 system directory; in the browser that root is the EmulatorJS wasm filesystem
-root. Set `EJS_biosUrl` to a ZIP that preserves the layout:
+root. The firmware ZIP therefore preserves the layout:
 
 ```
 bbk-firmware.zip
@@ -96,9 +103,13 @@ bbk-firmware.zip
         └── E.BIN
 ```
 
-EmulatorJS extracts the archive into the wasm filesystem root, which is where
-the core looks for the firmware on Emscripten. The folder name selects the
-model. Files are never uploaded; the browser reads them locally.
+EmulatorJS 4.2.x writes every BIOS archive entry to the content directory under
+its bare file name, which drops the `bbkemu/<model>/` folders and leaves the
+core unable to find the ROMs. The player therefore replaces
+`EJS_emulator.downloadBios` on the `ready` event and writes each entry at
+`/<archive path>` with `EJS_COMPRESSION` and the wasm `FS` API, so the archive
+layout is what the core sees. The folder name selects the model. Files are
+never uploaded; the browser reads them locally.
 
 ### Content
 
@@ -129,3 +140,6 @@ The output bundle is written to `out/bbkemu-emulatorjs.zip`.
   available through the EmulatorJS core-options menu.
 - Frontend save states use `retro_serialize`, so they stay in browser storage
   and are not written back to a file.
+- Core diagnostics go to `stderr`, which EmulatorJS forwards to the browser
+  console. The libretro log callback is C-variadic and cannot be called from
+  wasm, so the core does not use it on this target.
