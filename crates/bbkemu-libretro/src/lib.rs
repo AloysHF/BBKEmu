@@ -736,13 +736,9 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
                 return fail("BBKEmu: the content path is not valid UTF-8.");
             }
         };
-        let game_data = match read_content(content_path.as_deref()) {
-            Ok(data) => data,
-            Err(message) => return fail(&message),
-        };
-
         // Frames are emitted as u16 RGB565 samples; the frontend has to know
-        // that before it receives the first frame.
+        // that before it receives the first frame. Declare it before any
+        // content is read so an unsupported format fails without doing I/O.
         let mut pixel_format = RETRO_PIXEL_FORMAT_RGB565;
         let declared = match ENVIRONMENT_CB {
             Some(cb) => cb(
@@ -754,6 +750,11 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
         if !declared {
             return fail("BBKEmu: this frontend does not support RGB565 video.");
         }
+
+        let game_data = match read_content(content_path.as_deref()) {
+            Ok(data) => data,
+            Err(message) => return fail(&message),
+        };
 
         let Some(ref mut emu) = EMULATOR else {
             return fail("BBKEmu: the core was not initialized by the frontend.");
