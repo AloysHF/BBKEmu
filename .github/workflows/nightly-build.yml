@@ -187,6 +187,8 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+          # Android 15 devices require 16 KB page alignment for native libraries.
+          RUSTFLAGS: "-C link-arg=-Wl,-z,max-page-size=16384"
         run: |
           cargo ndk \
             -t arm64-v8a -t armeabi-v7a -t x86 -t x86_64 \
@@ -213,6 +215,8 @@ jobs:
           done
           cp crates/bbkemu-libretro/bbkemu_libretro.info \
              libretro/bbk-emu-android/bbkemu_libretro.info
+          cp crates/bbkemu-libretro/android.json \
+             libretro/bbk-emu-android/android.json
           ls -laR libretro/bbk-emu-android
 
       - name: Package libretro (Android)
