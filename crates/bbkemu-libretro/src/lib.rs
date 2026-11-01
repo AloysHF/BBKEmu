@@ -21,6 +21,7 @@ const RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK: u32 = 12;
 const RETRO_ENVIRONMENT_SET_VARIABLES: u32 = 16;
 const RETRO_ENVIRONMENT_GET_VARIABLE: u32 = 17;
 const RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: u32 = 18;
+#[cfg(not(target_os = "emscripten"))]
 const RETRO_ENVIRONMENT_GET_LOG_INTERFACE: u32 = 27;
 const RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY: u32 = 31;
 
@@ -85,8 +86,14 @@ type RetroInputStateT =
     Option<unsafe extern "C" fn(port: u32, device: u32, index: u32, id: u32) -> i16>;
 type RetroKeyboardCallbackT =
     Option<unsafe extern "C" fn(down: bool, keycode: u32, character: u32, key_modifiers: u16)>;
-type RetroLogPrintfT =
-    Option<unsafe extern "C" fn(level: u32, fmt: *const c_char, ...) -> std::os::raw::c_int>;
+/// Frontend logging callback.
+///
+/// libretro declares it C-variadic, but over wasm the callee signature carries
+/// a hidden varargs pointer, so calling it from Rust traps with "function
+/// signature mismatch". Native builds call it with the message as the format
+/// string and no arguments; Emscripten builds log to stderr instead.
+#[cfg(not(target_os = "emscripten"))]
+type RetroLogPrintfT = Option<unsafe extern "C" fn(level: u32, fmt: *const c_char)>;
 
 // libretro structs
 #[repr(C)]
@@ -146,6 +153,7 @@ static mut AUDIO_CB: RetroAudioSampleT = None;
 static mut AUDIO_BATCH_CB: RetroAudioSampleBatchT = None;
 
 /// Frontend logging callback, queried from the frontend's environment
+#[cfg(not(target_os = "emscripten"))]
 static mut LOG_CB: RetroLogPrintfT = None;
 
 /// Input poll callback
@@ -182,6 +190,7 @@ struct RetroMessage {
 }
 
 /// Frontend logging callback (RETRO_ENVIRONMENT_GET_LOG_INTERFACE).
+#[cfg(not(target_os = "emscripten"))]
 #[repr(C)]
 struct RetroLogCallback {
     log: RetroLogPrintfT,
@@ -237,19 +246,26 @@ fn get_system_directory() -> Option<PathBuf> {
     }
 }
 
-/// Mirror a message to the frontend's log interface and the `log` crate.
+/// Mirror a message to the frontend's log and the `log` crate.
 fn log_message(level: u32, message: &str) {
     match level {
         RETRO_LOG_ERROR => log::error!("{message}"),
         RETRO_LOG_WARN => log::warn!("{message}"),
         _ => log::info!("{message}"),
     }
-    // Frontends always answer the log interface with the printf-style callback
-    // (`%s` avoids interpreting percent signs in game names or paths).
+
+    // EmulatorJS forwards stderr to the browser console.
+    #[cfg(target_os = "emscripten")]
+    eprintln!("{message}");
+
+    // The message itself is the format string, so percent signs in game names
+    // or paths have to be escaped before reaching the frontend's printf.
+    #[cfg(not(target_os = "emscripten"))]
     unsafe {
         if let Some(log_cb) = LOG_CB {
-            if let Ok(c_message) = std::ffi::CString::new(message) {
-                log_cb(level, c"%s".as_ptr(), c_message.as_ptr());
+            let escaped = message.replace('%', "%%");
+            if let Ok(c_message) = std::ffi::CString::new(escaped) {
+                log_cb(level, c_message.as_ptr());
             }
         }
     }
@@ -584,13 +600,18 @@ pub extern "C" fn retro_set_environment(cb: RetroEnvironmentT) {
         };
         if let Some(env_cb) = cb {
             // Query the log interface first so later failures reach the
-            // frontend's log as well as the on-screen message.
-            let mut log = RetroLogCallback { log: None };
-            if env_cb(
-                RETRO_ENVIRONMENT_GET_LOG_INTERFACE,
-                &mut log as *mut _ as *mut c_void,
-            ) {
-                LOG_CB = log.log;
+            // frontend's log as well as the on-screen message. Over wasm the
+            // callback is unusable (see `RetroLogPrintfT`), so it is native
+            // only.
+            #[cfg(not(target_os = "emscripten"))]
+            {
+                let mut log = RetroLogCallback { log: None };
+                if env_cb(
+                    RETRO_ENVIRONMENT_GET_LOG_INTERFACE,
+                    &mut log as *mut _ as *mut c_void,
+                ) {
+                    LOG_CB = log.log;
+                }
             }
 
             env_cb(
