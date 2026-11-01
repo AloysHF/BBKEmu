@@ -37,7 +37,23 @@ BBKEmu requires ROM files from a physical BBK dictionary to run games:
 - **8.BIN** — Font ROM (2 MiB)
 - **E.BIN** — OS ROM (2 MiB)
 
-These files are not distributed with the emulator and must be obtained separately.
+These files are not distributed with the emulator and must be obtained
+separately. Every frontend reads them from the same fixed location below its
+system directory, with strictly case-sensitive names:
+
+```
+system/
+└── bbkemu/
+    ├── a4980/
+    │   ├── 8.BIN
+    │   └── E.BIN
+    └── a4988/
+        ├── 8.BIN
+        └── E.BIN
+```
+
+The model is selected with `--model` (standalone), the `bbkemu_model` core
+option (RetroArch, RetroDroid) or the firmware archive layout (EmulatorJS).
 
 ## Usage
 
@@ -48,14 +64,14 @@ Download the latest binary from the [Releases](https://github.com/AloysHF/BBKEmu
 The basic usage is listed below, but there are many more options for controlling the behavior of the emulator. See the [Standalone Emulator](docs/Standalone-Emulator.md) documentation for the full list of options.
 
 ```bash
-# Basic usage with ROM files
-bbk-emu game.gam -8 8.BIN -e E.BIN
-
-# If ROM files are in system/BBKEmu/<model>/
+# Basic usage (firmware in ./system/bbkemu/a4980/)
 bbk-emu game.gam
 
+# Another firmware root or model
+bbk-emu game.gam --system-dir /path/to/system --model a4988
+
 # With common options
-bbk-emu game.gam --scale 4 --fullscreen --model 4980
+bbk-emu game.gam --scale 4 --fullscreen --model a4980
 
 # Headless mode for testing
 bbk-emu game.gam --frames 100 --output screenshot.png
@@ -77,7 +93,7 @@ BBKEmu can be used as a libretro core with RetroArch, allowing you to play BBK g
 1. Open RetroArch
 2. Select "Load Core" → "BBKEmu"
 3. Select "Load Content" and choose a `.gam` game file
-4. ROM files should be placed in `system/BBKEmu/<model>/` (e.g., `system/BBKEmu/A4980/`)
+4. ROM files should be placed in `system/bbkemu/<model>/` (e.g., `system/bbkemu/a4980/`), and the matching model selected in *Quick Menu → Core Options*
 
 #### RetroArch on Android
 

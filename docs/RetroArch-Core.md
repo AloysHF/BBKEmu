@@ -27,7 +27,9 @@ RetroArch's `cores/` directory, and copy `bbkemu_libretro.info` to its
 3. Choose a `.gam` file.
 
 ROM files (`8.BIN` and `E.BIN`) should be placed in RetroArch's
-`system/BBKEmu/<model>/` directory (e.g., `system/BBKEmu/A4980/`).
+`system/bbkemu/<model>/` directory (`system/bbkemu/a4980/` or
+`system/bbkemu/a4988/`). Select the matching model in
+**Quick Menu > Core Options > BBK Model**. File names are case-sensitive.
 
 ## Mobile Platforms
 

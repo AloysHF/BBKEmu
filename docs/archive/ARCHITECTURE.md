@@ -268,7 +268,7 @@ cargo check --workspace
 cargo build --release
 
 # Run standalone
-cargo run --release -p bbkemu -- game.gam -8 8.BIN -e E.BIN
+cargo run --release -p bbkemu -- game.gam --system-dir ./system --model a4980
 
 # Build libretro core only
 cargo build --release -p bbkemu-libretro

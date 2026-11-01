@@ -7,12 +7,13 @@ use std::path::{Path, PathBuf};
 
 use bbkemu_core::input::BbkKey;
 use bbkemu_core::lcd::LcdOrientation;
-use bbkemu_core::{model, BbkModel, Emulator};
+use bbkemu_core::{firmware, model, BbkModel, Emulator};
 
 // libretro constants
 const RETRO_API_VERSION: u32 = 1;
 const RETRO_REGION_NTSC: u32 = 0;
 const RETRO_ENVIRONMENT_SET_MESSAGE: u32 = 6;
+#[cfg(not(target_os = "emscripten"))]
 const RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY: u32 = 9;
 const RETRO_ENVIRONMENT_SET_PIXEL_FORMAT: u32 = 10;
 const RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS: u32 = 11;
@@ -195,6 +196,7 @@ struct RetroVariable {
 
 /// Core options in the libretro `Label; choice1|choice2` format.
 static CORE_OPTIONS: &[(&str, &str)] = &[
+    ("bbkemu_model", "BBK Model; a4980|a4988"),
     (
         "bbkemu_lcd_color",
         "LCD Color Theme; grey|green|blue|yellow|random",
@@ -218,6 +220,7 @@ static CORE_OPTIONS: &[(&str, &str)] = &[
 ];
 
 /// Get the system directory from RetroArch
+#[cfg(not(target_os = "emscripten"))]
 fn get_system_directory() -> Option<PathBuf> {
     unsafe {
         let cb = ENVIRONMENT_CB?;
@@ -377,62 +380,85 @@ fn persist_battery_save() {
     }
 }
 
-/// Try to load the firmware ROMs for the given model.
+/// Directory that holds firmware, as seen by the core.
 ///
-/// Desktop frontends install the firmware under `<system>/BBKEmu/<model>/`;
-/// the Android frontend imports firmware files flat into `<system>/`.
-/// EmulatorJS cannot write to that directory: it extracts an `EJS_biosUrl`
-/// archive beside the content file instead, so on Emscripten also look there.
-///
-/// Returns the names of the firmware files that could not be found.
-fn load_roms_for_model(
-    emu: &mut Emulator,
-    model: &BbkModel,
-    content_path: Option<&Path>,
-) -> Vec<&'static str> {
-    let mut model_dirs = Vec::new();
-    if let Some(system_dir) = get_system_directory() {
-        model_dirs.push(system_dir.join("BBKEmu").join(model.name));
-        model_dirs.push(system_dir);
-    }
-
+/// EmulatorJS extracts `EJS_biosUrl` archives into the virtual filesystem
+/// root and does not report a system directory, so `/` is the root there.
+fn firmware_root() -> Option<PathBuf> {
     #[cfg(target_os = "emscripten")]
-    if let Some(path) = content_path {
-        let dir = path.parent().unwrap_or_else(|| Path::new("/"));
-        model_dirs.push(dir.to_path_buf());
-        model_dirs.push(dir.join("BBKEmu").join(model.name));
+    {
+        Some(PathBuf::from("/"))
     }
     #[cfg(not(target_os = "emscripten"))]
-    let _ = content_path;
-
-    let find_rom = |names: &[&str]| {
-        model_dirs
-            .iter()
-            .flat_map(|dir| names.iter().map(move |name| dir.join(name)))
-            .find_map(|path| std::fs::read(path).ok())
-    };
-
-    let mut missing = Vec::new();
-    match find_rom(&["8.BIN", "8.bin"]) {
-        Some(data) => emu.load_rom_8(&data),
-        None => missing.push("8.BIN"),
+    {
+        get_system_directory()
     }
-    match find_rom(&["E.BIN", "E.bin", "e.bin"]) {
-        Some(data) => emu.load_rom_e(&data),
-        None => missing.push("E.BIN"),
-    }
-    missing
 }
 
-/// Directory the core searches first for firmware, for error messages.
-fn firmware_location() -> String {
-    match get_system_directory() {
-        Some(dir) => dir
-            .join("BBKEmu")
-            .join(model::MODEL_4980.name)
-            .display()
-            .to_string(),
-        None => "<system>/BBKEmu/A4980".to_owned(),
+/// Load the firmware ROMs for the selected model.
+fn load_firmware(emu: &mut Emulator, model: &BbkModel) -> Result<(), String> {
+    let root = firmware_root().ok_or_else(|| {
+        format!(
+            "the frontend did not report a system directory\n\
+             Copy 8.BIN and E.BIN into <system>/bbkemu/{}.",
+            model.id
+        )
+    })?;
+    let firmware = firmware::load(&root, model)?;
+    emu.load_rom_8(&firmware.font);
+    emu.load_rom_e(&firmware.os);
+    Ok(())
+}
+
+/// Model selected by the frontend, defaulting to the A4980.
+unsafe fn selected_model() -> &'static BbkModel {
+    get_variable_value(ENVIRONMENT_CB, "bbkemu_model")
+        .and_then(|value| model::from_id(&value))
+        .unwrap_or(&model::MODEL_4980)
+}
+
+/// Model named by the only `bbkemu/<model>/` folder below `root`.
+///
+/// EmulatorJS exposes no core-option UI, so the firmware archive layout
+/// selects the model there. Several model folders are rejected instead of
+/// guessed.
+#[cfg(any(target_os = "emscripten", test))]
+fn model_in_root(root: &Path) -> Result<Option<&'static BbkModel>, String> {
+    let Some(core_dir) =
+        firmware::exact_child(root, firmware::CORE_DIR).filter(|path| path.is_dir())
+    else {
+        return Ok(None);
+    };
+
+    let mut models: Vec<&'static BbkModel> = Vec::new();
+    let entries = std::fs::read_dir(&core_dir)
+        .map_err(|error| format!("cannot read {}: {error}", core_dir.display()))?;
+    for entry in entries {
+        let entry =
+            entry.map_err(|error| format!("cannot read {}: {error}", core_dir.display()))?;
+        if !entry.path().is_dir() {
+            continue;
+        }
+        if let Some(model) = entry.file_name().to_str().and_then(model::from_id) {
+            models.push(model);
+        }
+    }
+    models.sort_by_key(|model| model.id);
+    models.dedup_by_key(|model| model.id);
+
+    match models.as_slice() {
+        [] => Ok(None),
+        [model] => Ok(Some(*model)),
+        _ => Err(format!(
+            "multiple model folders in {}/{}: {}; keep only one model per archive",
+            root.display(),
+            firmware::CORE_DIR,
+            models
+                .iter()
+                .map(|model| model.id)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
     }
 }
 
@@ -724,6 +750,7 @@ struct RetroInputDescriptor {
 ///
 /// `info` must be a valid pointer to a `RetroGameInfo` struct whose `path` is
 /// either null or a valid NUL-terminated string.
+#[allow(static_mut_refs)]
 #[no_mangle]
 pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
     guard(false, || {
@@ -756,19 +783,33 @@ pub unsafe extern "C" fn retro_load_game(info: *const RetroGameInfo) -> bool {
             Err(message) => return fail(&message),
         };
 
+        // The model decides which firmware directory is used, so it has to be
+        // applied before the ROMs are read. The emulator is rebuilt only when
+        // the frontend selected another model than the default.
+        #[cfg(target_os = "emscripten")]
+        let bbk_model = match model_in_root(Path::new("/")) {
+            Ok(Some(model)) => model,
+            Ok(None) => selected_model(),
+            Err(message) => return fail(&format!("BBKEmu: {message}")),
+        };
+        #[cfg(not(target_os = "emscripten"))]
+        let bbk_model = selected_model();
+        let needs_model = EMULATOR
+            .as_ref()
+            .is_none_or(|emu| emu.model().id != bbk_model.id);
+        if needs_model {
+            let mut emu = Emulator::new(bbk_model);
+            apply_core_options(&mut emu);
+            EMULATOR = Some(emu);
+        }
+
         let Some(ref mut emu) = EMULATOR else {
             return fail("BBKEmu: the core was not initialized by the frontend.");
         };
 
         // Load the firmware ROMs before loading the game.
-        let bbk_model = &model::MODEL_4980;
-        let missing = load_roms_for_model(emu, bbk_model, content_path.as_deref());
-        if !missing.is_empty() {
-            return fail(&format!(
-                "BBKEmu: missing firmware: {}.\nCopy 8.BIN and E.BIN into {}.",
-                missing.join(", "),
-                firmware_location()
-            ));
+        if let Err(message) = load_firmware(emu, bbk_model) {
+            return fail(&format!("BBKEmu: {message}"));
         }
 
         // Set input descriptors
@@ -1303,5 +1344,53 @@ mod save_state_tests {
         assert_eq!(restored.cpu.cycles, state.cpu.cycles);
         assert_eq!(restored.bank_switch.banks, state.bank_switch.banks);
         assert_eq!(restored.bank_sys_d, state.bank_sys_d);
+    }
+}
+
+#[cfg(test)]
+mod model_scan_tests {
+    use super::*;
+
+    fn temp_root(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "bbkemu-model-scan-{name}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn selects_the_only_model_folder() {
+        let root = temp_root("single");
+        std::fs::create_dir_all(root.join("bbkemu").join("a4988")).unwrap();
+        let model = model_in_root(&root).unwrap().expect("model folder");
+        assert_eq!(model.id, "a4988");
+    }
+
+    #[test]
+    fn ignores_unknown_folders_and_requires_the_exact_core_dir() {
+        let root = temp_root("unknown");
+        std::fs::create_dir_all(root.join("BBKEmu").join("a4980")).unwrap();
+        assert!(model_in_root(&root).unwrap().is_none());
+
+        std::fs::create_dir_all(root.join("bbkemu").join("other")).unwrap();
+        assert!(model_in_root(&root).unwrap().is_none());
+    }
+
+    #[test]
+    fn rejects_several_model_folders() {
+        let root = temp_root("several");
+        std::fs::create_dir_all(root.join("bbkemu").join("a4980")).unwrap();
+        std::fs::create_dir_all(root.join("bbkemu").join("a4988")).unwrap();
+        let Err(error) = model_in_root(&root) else {
+            panic!("several model folders must be rejected");
+        };
+        assert!(
+            error.contains("a4980") && error.contains("a4988"),
+            "{error}"
+        );
     }
 }

@@ -16,7 +16,7 @@ systemid = "bbk"
 # Libretro Features
 database = "BBK"
 supports_no_game = "false"
-firmware_count = 2
+firmware_count = 4
 savestate = "true"
 cheats = "true"
 input_descriptors = "true"
@@ -30,11 +30,19 @@ disk_control = "false"
 is_experimental = "false"
 
 # Firmware Information
-firmware0_desc = "8.BIN (Font ROM)"
-firmware0_path = "BBKEmu/A4980/8.BIN"
-firmware0_opt = "false"
-firmware1_desc = "E.BIN (OS ROM)"
-firmware1_path = "BBKEmu/A4980/E.BIN"
-firmware1_opt = "false"
+# Only the two files of the model selected in Core Options are required.
+firmware0_desc = "A4980 8.BIN (Font ROM)"
+firmware0_path = "bbkemu/a4980/8.BIN"
+firmware0_opt = "true"
+firmware1_desc = "A4980 E.BIN (OS ROM)"
+firmware1_path = "bbkemu/a4980/E.BIN"
+firmware1_opt = "true"
+firmware2_desc = "A4988 8.BIN (Font ROM)"
+firmware2_path = "bbkemu/a4988/8.BIN"
+firmware2_opt = "true"
+firmware3_desc = "A4988 E.BIN (OS ROM)"
+firmware3_path = "bbkemu/a4988/E.BIN"
+firmware3_opt = "true"
 
-description = "BBKEmu is an emulator for BBK electronic dictionary game platform. Games run on the 6502 CPU with the BBK OS ROM providing system calls for LCD, keyboard, audio and timer hardware. Requires font ROM (8.BIN) and OS ROM (E.BIN) from a physical BBK device in system/BBKEmu/<model>/ directory."
+notes = "(!) Select the BBK model in Core Options; the core reads 8.BIN and E.BIN from bbkemu/<model>/ below the system directory.|(!) Names are case-sensitive: the files must be named exactly 8.BIN and E.BIN."
+description = "BBKEmu is an emulator for BBK electronic dictionary game platform. Games run on the 6502 CPU with the BBK OS ROM providing system calls for LCD, keyboard, audio and timer hardware. Requires font ROM (8.BIN) and OS ROM (E.BIN) from a physical BBK device in system/bbkemu/a4980/ or system/bbkemu/a4988/."

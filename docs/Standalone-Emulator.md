@@ -20,17 +20,26 @@ The binary is produced at `target/release/bbk-emu` (`.exe` on Windows).
 ## Loading Games
 
 The standalone emulator accepts `.gam` files. ROM files (`8.BIN` and `E.BIN`)
-are required and searched in the following order:
+are required and read from a fixed, case-sensitive location below the system
+directory:
 
-1. Paths specified via `-8` / `--rom8` and `-e` / `--rome` flags.
-2. `system/BBKEmu/<model>/` relative to the current directory.
+```
+<system-dir>/
+└── bbkemu/
+    └── <model>/          # a4980 or a4988
+        ├── 8.BIN
+        └── E.BIN
+```
+
+`--system-dir` defaults to `system`, so the layout above relative to the
+current directory is enough:
 
 ```bash
-# Load a game with explicit ROM paths
-bbk-emu -8 8.BIN -e E.BIN path/to/game.gam
-
-# Load a game (ROMs auto-discovered from system/BBKEmu/<model>/)
+# Firmware in ./system/bbkemu/a4980/
 bbk-emu path/to/game.gam
+
+# Another firmware root and model
+bbk-emu path/to/game.gam --system-dir /path/to/system --model a4988
 ```
 
 You can always print the built-in help with:
@@ -50,11 +59,10 @@ bbk-emu [OPTIONS] <GAME_PATH>
 | Option | Value | Default | Description |
 |---|---|---|---|
 | `<GAME_PATH>` | path | *required* | Path to the game file (`.gam`). |
-| `-8, --rom8 <PATH>` | path | — | Font ROM file (`8.BIN`). If not specified, searches in `system/BBKEmu/<model>/`. |
-| `-e, --rome <PATH>` | path | — | OS ROM file (`E.BIN`). Required for LLE mode. If not specified, searches in `system/BBKEmu/<model>/`. |
+| `--system-dir <DIR>` | path | `system` | Root directory of the firmware tree (`<DIR>/bbkemu/<model>/`). |
 | `-s, --scale <N>` | `1`–`16` | `4` | Integer scaling factor for the window. |
 | `-f, --fullscreen` | flag | off | Run in borderless fullscreen at the desktop resolution. |
-| `-m, --model <MODEL>` | `4980`, `4988` | `4980` | BBK model to emulate. |
+| `-m, --model <MODEL>` | `a4980`, `a4988` | `a4980` | BBK model to emulate; also selects the firmware folder. |
 | `-d, --debug` | flag | off | Enable debug logging output. |
 | `-o, --output <PATH>` | path | `output.png` | Output file path for headless mode screenshots. |
 | `--frames <N>` | integer | — | Run headless for N frames, save screenshot, then exit. |
@@ -166,7 +174,7 @@ bbk-emu game.gam --cheat "001234FF" --cheat "005678AB"
 bbk-emu path/to/game.gam
 
 # 2x scaling with specific model
-bbk-emu --scale 2 --model 4988 path/to/game.gam
+bbk-emu --scale 2 --model a4988 --system-dir /path/to/system path/to/game.gam
 
 # Fullscreen with landscape LCD
 bbk-emu --fullscreen --swap-lcd game.gam

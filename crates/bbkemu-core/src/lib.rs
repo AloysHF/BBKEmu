@@ -7,6 +7,7 @@ pub mod cheat;
 pub mod cpu;
 pub mod debug;
 pub mod emulator;
+pub mod firmware;
 pub mod font_data;
 pub mod gam;
 pub mod input;

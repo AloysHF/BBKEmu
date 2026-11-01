@@ -13,19 +13,35 @@
   "save_state_format": 1,
   "firmware": [
     {
-      "file": "8.BIN",
+      "file": "bbkemu/a4980/8.BIN",
       "required": true,
       "hint": {
-        "en": "Font ROM from a BBK A4980 device. Keep the original name 8.BIN.",
-        "zh": "来自步步高 A4980 的字体 ROM，文件名必须保持为 8.BIN。"
+        "en": "Font ROM from a BBK A4980 device. Keep the original name 8.BIN, including its case.",
+        "zh": "来自步步高 A4980 的字体 ROM，文件名必须保持为 8.BIN（区分大小写）。"
       }
     },
     {
-      "file": "E.BIN",
+      "file": "bbkemu/a4980/E.BIN",
       "required": true,
       "hint": {
-        "en": "OS ROM from a BBK A4980 device. Keep the original name E.BIN.",
-        "zh": "来自步步高 A4980 的系统 ROM，文件名必须保持为 E.BIN。"
+        "en": "OS ROM from a BBK A4980 device. Keep the original name E.BIN, including its case.",
+        "zh": "来自步步高 A4980 的系统 ROM，文件名必须保持为 E.BIN（区分大小写）。"
+      }
+    },
+    {
+      "file": "bbkemu/a4988/8.BIN",
+      "required": false,
+      "hint": {
+        "en": "Font ROM for the A4988 model; only needed when bbkemu_model is set to a4988.",
+        "zh": "A4988 机型的字体 ROM；仅当核心选项 bbkemu_model 设为 a4988 时需要。"
+      }
+    },
+    {
+      "file": "bbkemu/a4988/E.BIN",
+      "required": false,
+      "hint": {
+        "en": "OS ROM for the A4988 model; only needed when bbkemu_model is set to a4988.",
+        "zh": "A4988 机型的系统 ROM；仅当核心选项 bbkemu_model 设为 a4988 时需要。"
       }
     }
   ],
@@ -37,7 +53,7 @@
     "pixel_format": "rgb565"
   },
   "notes": {
-    "en": "Runs .gam dictionary games on a 159x96 LCD. Requires 8.BIN and E.BIN firmware from a BBK A4980/A4988. A is Enter, B is Exit, Y is Help, X is the R key, Select is Insert and Start is Search.",
-    "zh": "运行 .gam 电子词典游戏，屏幕为 159x96。需要步步高 A4980/A4988 的 8.BIN 与 E.BIN 固件。A 为确认，B 为退出，Y 为帮助，X 为 R 键，Select 为插入，Start 为查找。"
+    "en": "Runs .gam dictionary games on a 159x96 LCD. Requires 8.BIN and E.BIN firmware for the model selected in Core Options (a4980 by default) under BIOS/bbk/<model>/. A is Enter, B is Exit, Y is Help, X is the R key, Select is Insert and Start is Search.",
+    "zh": "运行 .gam 电子词典游戏，屏幕为 159x96。需要所选机型（默认 a4980）的 8.BIN 与 E.BIN 固件，放在 BIOS/bbk/<model>/ 下。A 为确认，B 为退出，Y 为帮助，X 为 R 键，Select 为插入，Start 为查找。"
   }
 }
