@@ -201,7 +201,7 @@ frame. It needs the (non-distributed) game assets, so it is `#[ignore]`d by
 default and run on demand:
 
 ```bash
-# Uses <repo>/tmp/games by default, or set BBK_GAME_DIR
+# Uses <repo>/tmp/bbk_game by default, or set BBK_GAME_DIR
 cargo test -p bbkemu-core --test smoke -- --ignored --nocapture
 ```
 

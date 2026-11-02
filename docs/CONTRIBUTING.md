@@ -123,7 +123,7 @@ cargo run --release -p bbkemu -- game.gam --frames 100 --output test.png
 Smoke tests verify that all games load and run without panicking. These tests require game assets and ROM files, so they are marked as `#[ignore]` and must be run explicitly.
 
 **Prerequisites:**
-- Game files (`.gam`) in `tmp/games/`
+- Game files (`.gam`) in `tmp/bbk_game/`
 - ROM files (`8.BIN`, `E.BIN`) in `tmp/roms/bbkemu/a4980/`
 
 **Run smoke tests:**
@@ -137,7 +137,7 @@ cargo test -p bbkemu-core --test smoke smoke_screenshot_all_games -- --ignored -
 ```
 
 **Environment variables:**
-- `BBK_GAME_DIR` — override game directory (default: `tmp/games`)
+- `BBK_GAME_DIR` — override game directory (default: `tmp/bbk_game`)
 - `BBK_ROM_DIR` — override ROM directory (default: `tmp/roms/bbkemu/a4980`)
 
 **Output:**

@@ -8,7 +8,7 @@
 //! cargo test -p bbkemu-core --test smoke -- --ignored --nocapture
 //! ```
 //!
-//! By default it looks for games in `<repo>/tmp/games` and ROMs in
+//! By default it looks for games in `<repo>/tmp/bbk_game` and ROMs in
 //! `<repo>/tmp/roms/bbkemu/a4980`. Override the locations with the `BBK_GAME_DIR`
 //! and `BBK_ROM_DIR` environment variables.
 
@@ -25,13 +25,13 @@ fn game_dir() -> Option<PathBuf> {
         let p = PathBuf::from(dir);
         return p.is_dir().then_some(p);
     }
-    // Default: <workspace_root>/tmp/games. CARGO_MANIFEST_DIR points at the
+    // Default: <workspace_root>/tmp/bbk_game. CARGO_MANIFEST_DIR points at the
     // core crate (crates/bbkemu-core), so go up two levels.
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let candidate = manifest
         .parent()
         .and_then(|p| p.parent())
-        .map(|root| root.join("tmp").join("games"));
+        .map(|root| root.join("tmp").join("bbk_game"));
     candidate.filter(|p| p.is_dir())
 }
 
@@ -112,7 +112,7 @@ fn smoke_all_games() {
         None => {
             eprintln!(
                 "skipping: no game directory found \
-                 (set BBK_GAME_DIR or place games in <repo>/tmp/games)"
+                 (set BBK_GAME_DIR or place games in <repo>/tmp/bbk_game)"
             );
             return;
         }
