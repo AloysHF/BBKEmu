@@ -12,6 +12,8 @@
   <a href="https://github.com/AloysHF/BBKEmu/releases"><img src="https://img.shields.io/github/downloads/AloysHF/BBKEmu/total" alt="Downloads"></a>
   <a href="https://sonarcloud.io/dashboard?id=AloysHF_BBKEmu"><img src="https://sonarcloud.io/api/project_badges/measure?project=AloysHF_BBKEmu&metric=alert_status" alt="Quality Gate Status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3%2B-blue.svg" alt="License: GPLv3 or later"></a>
+  <a href="https://discord.gg/E4SQjXUkZy"><img src="https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://qm.qq.com/q/LAO7DKAWUC"><img src="https://img.shields.io/badge/QQ%E7%BE%A4-Join%20Us-12B7F5?logo=tencent-qq&logoColor=white" alt="QQ Group"></a>
 </p>
 
 BBK (步步高) A-series electronic dictionary game emulator written in Rust. Plays `.gam` game files from BBK A4980 and A4988 dictionaries.

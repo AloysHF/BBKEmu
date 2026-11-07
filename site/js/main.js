@@ -270,6 +270,7 @@
       // footer
       'footer-desc': '用 Rust 编写的 BBK 电子词典游戏模拟器',
       'footer-project': '项目',
+      'footer-community': '社区',
       'footer-docs': '文档',
       'footer-browser': '浏览器',
       'footer-specs': '技术规格',
@@ -367,6 +368,7 @@
       // footer
       'footer-desc': 'A BBK electronic dictionary game emulator written in Rust',
       'footer-project': 'Project',
+      'footer-community': 'Community',
       'footer-docs': 'Docs',
       'footer-browser': 'Browser',
       'footer-specs': 'Specs',
